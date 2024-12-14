@@ -89,15 +89,9 @@ int USBSID_Class::USBSID_Close(void)
 {
   int e;
   if (rc >= 0) e = LIBUSB_Exit();
-  #ifdef __cpp_lib_format
-    static_assert(rc != -1, std::format("Expected rc == -1, got {}", rc));
-    static_assert(e != 0, std::format("Expected e == 0, got {}", e));
-    static_assert(devh != NULL, std::format("Expected dev == NULL, got {}", devh));
-  #else
-    if(rc != -1) std::cout << "Expected rc == -1, got" << rc << std::endl;
-    if(e != 0) std::cout <<  "Expected e == 0, got" << e << std::endl;
-    if(devh != NULL) std::cout << "Expected dev == NULL, got" << devh << std::endl;
-  #endif
+  if(rc != -1) std::cout << "Expected rc == -1, got" << rc << std::endl;
+  if(e != 0) std::cout <<  "Expected e == 0, got" << e << std::endl;
+  if(devh != NULL) std::cout << "Expected dev == NULL, got" << devh << std::endl;
   USBDBG(stdout, "[USBSID] De-init finished\n");
   return 0;
 }

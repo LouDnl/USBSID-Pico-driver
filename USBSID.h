@@ -34,11 +34,7 @@
   #include <cstdlib>
   #include <cstring>
   #include <chrono>
-  #if __has_include(<format>)
-    #include <format>
-  #else
-    #include <iostream>
-  #endif
+  #include <iostream>
   #include <thread>
 #else
   #include <stdint.h>
