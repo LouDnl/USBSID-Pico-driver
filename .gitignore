@@ -1,0 +1,14 @@
+# Ignore all
+*
+
+# Except these extensions
+!*.c
+!*.cc
+!*.cpp
+!*.h
+!*.hpp
+
+# And not these specific files
+!.gitignore
+!README.md
+!LICENSE
