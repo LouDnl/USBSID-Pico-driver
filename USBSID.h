@@ -34,7 +34,6 @@
   #include <cstdlib>
   #include <cstring>
   #include <chrono>
-  #include <iostream>
   #include <thread>
 #else
   #include <stdint.h>

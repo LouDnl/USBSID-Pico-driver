@@ -89,9 +89,9 @@ int USBSID_Class::USBSID_Close(void)
 {
   int e;
   if (rc >= 0) e = LIBUSB_Exit();
-  if(rc != -1) std::cout << "Expected rc == -1, got" << rc << std::endl;
-  if(e != 0) std::cout <<  "Expected e == 0, got" << e << std::endl;
-  if(devh != NULL) std::cout << "Expected dev == NULL, got" << devh << std::endl;
+  if(rc != -1) USBERR(stderr, "Expected rc == -1, received: %d\n", rc);
+  if(e != 0) USBERR(stderr, "Expected e == 0, received: %d\n", e);
+  if(devh != NULL) USBERR(stderr, "Expected dev == NULL, received: %p", (void*)&devh);
   USBDBG(stdout, "[USBSID] De-init finished\n");
   return 0;
 }
