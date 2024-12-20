@@ -71,7 +71,7 @@ extern "C"
   };
   void ringpush_USBSID(USBSIDitf p, uint16_t reg, uint8_t val, uint8_t cycles){
     if( p == NULL ) return;
-    ((USBSID_Class*) p)->USBSID_RingPush(reg, val, cycles);
+    ((USBSID_Class*) p)->USBSID_RingPushCycled(reg, val, cycles);
   };
   int waitforcycle_USBSID(USBSIDitf p, unsigned int cycles){
     if( p == NULL ) return;
