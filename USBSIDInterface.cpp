@@ -30,13 +30,17 @@ using namespace USBSID_NS;
 
 extern "C"
 {
-  USBSIDitf create_USBSID(){
+  USBSIDitf create_USBSID(void){
     return (USBSID_Class*) new USBSID_Class();
   };
-  int init_USBSID(USBSIDitf p, bool set_async){
+  int init_USBSID(USBSIDitf p, bool start_threaded, bool with_cycles){
     if( p == NULL ) return -1;
-    return ((USBSID_Class*) p)->USBSID_Init(set_async);
+    return ((USBSID_Class*) p)->USBSID_Init(start_threaded, with_cycles);
   };
+  void restartthread_USBSID(USBSIDitf p, bool with_cycles){
+    if( p == NULL ) return;
+    return ((USBSID_Class*) p)->USBSID_RestartThread(with_cycles);
+  }
   void close_USBSID(USBSIDitf p){
     if( p == NULL ) return;
     delete (USBSID_Class*) p;
@@ -61,20 +65,28 @@ extern "C"
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_Write(buff, len);
   };
-  void write_USBSID(USBSIDitf p, uint16_t reg, uint8_t val, uint8_t cycles){
+  void writecycled_USBSID(USBSIDitf p, uint16_t reg, uint8_t val, uint16_t cycles){
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_Write(reg, val, cycles);
   };
+  void write_USBSID(USBSIDitf p, uint16_t reg, uint8_t val){
+    if( p == NULL ) return;
+    return ((USBSID_Class*)p)->USBSID_Write(reg, val);
+  };
   unsigned char read_USBSID(USBSIDitf p, unsigned char *writebuff, unsigned char *buff){
-    if( p == NULL ) return NULL;
+    if( p == NULL ) return 0;
     return ((USBSID_Class*)p)->USBSID_Read(writebuff, buff);
   };
-  void ringpush_USBSID(USBSIDitf p, uint16_t reg, uint8_t val, uint8_t cycles){
+  void ringpush_USBSID(USBSIDitf p, uint16_t reg, uint8_t val){
     if( p == NULL ) return;
-    ((USBSID_Class*) p)->USBSID_RingPushCycled(reg, val, cycles);
+    return ((USBSID_Class*) p)->USBSID_RingPush(reg, val);
   };
-  int waitforcycle_USBSID(USBSIDitf p, unsigned int cycles){
+  void ringpushcycled_USBSID(USBSIDitf p, uint16_t reg, uint8_t val, uint16_t cycles){
     if( p == NULL ) return;
-    ((USBSID_Class*) p)->USBSID_WaitForCycle(cycles);
+    return ((USBSID_Class*) p)->USBSID_RingPushCycled(reg, val, cycles);
+  };
+  int_fast64_t waitforcycle_USBSID(USBSIDitf p, uint_fast64_t cycles){
+    if( p == NULL ) return 0;
+    return ((USBSID_Class*) p)->USBSID_WaitForCycle(cycles);
   };
 }

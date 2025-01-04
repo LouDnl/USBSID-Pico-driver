@@ -27,6 +27,8 @@
 #define _USBSID_H_
 #pragma GCC push_options
 #pragma GCC optimize ("O0")
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
 
 #ifdef __cplusplus
   #include <cstdint>
@@ -70,6 +72,7 @@ namespace USBSID_NS
     EP_IN_ADDR     = 0x82,
     LEN_IN_BUFFER  = 1,
     LEN_OUT_BUFFER = 3,
+    LEN_CYC_BUFFER = 4,
     LEN_THR_BUFFER = 64,
     LEN_TMP_BUFFER = 4
   };
@@ -85,6 +88,7 @@ namespace USBSID_NS
 
   /* Thread related */
   static int exit_thread;
+  static int run_thread;
 
   /* Fake C64 Memory */
   static uint8_t sid_memory[0x20];
@@ -100,6 +104,7 @@ namespace USBSID_NS
   static bool out_buffer_dma = false;
 
   static bool threaded = false;
+  static bool withcycles = false;
   static int rc, read_completed, write_completed;
 
   /* USB buffer related */
@@ -124,23 +129,36 @@ namespace USBSID_NS
     private:
 
       /* LIBUSB related */
-      int LIBUSB_Setup(bool start_threaded);
+      int LIBUSB_Setup(bool start_threaded, bool with_cycles);
       int LIBUSB_Exit(void);
+      void LIBUSB_StopThread(void);
+      void LIBUSB_StopTransfers(void);
+      int LIBUSB_OpenDevice(void);
+      void LIBUSB_CloseDevice(void);
+      int LIBUSB_DetachKernelDriver(void);
+      int LIBUSB_ConfigureDevice(void);
+      void LIBUSB_InitOutBuffer(void);
+      void LIBUSB_FreeOutBuffer(void);
+      void LIBUSB_InitInBuffer(void);
+      void LIBUSB_FreeInBuffer(void);
       static void LIBUSB_CALL usb_out(struct libusb_transfer *transfer);
       static void LIBUSB_CALL usb_in(struct libusb_transfer *transfer);
 
+      /* Line encoding ~ baud rate is ignored by TinyUSB */
+      unsigned char encoding[7] = { 0x40, 0x54, 0x89, 0x00, 0x00, 0x00, 0x08 };
+
       /* Threading related */
-      // void* USBSID_Thread(void ( *f )(void));
       void* USBSID_Thread(void);
       void USBSID_StopThread(void);
       int USBSID_IsRunning(void);
       pthread_t ptid;
 
       /* Ringbuffer related */
-      void USBSID_RingPopCycled(void);
-      uint8_t * USBSID_RingPop(bool return_busvalue);
+      void USBSID_RingPopCycled(void);  /* Threaded writer with cycles */
+      void USBSID_RingPop(void);  /* Threaded writer */
+      uint8_t * USBSID_RingPop(bool return_busvalue);  /* Threaded writer with return value */
 
-      /* Memory related */
+      /* SID memory related ~ Unused at the moment */
       void USBSID_FlushMemory(void);
       void USBSID_FillMemory(void);
       void USBSID_DebugPrint(void);
@@ -153,10 +171,12 @@ namespace USBSID_NS
       ~USBSID_Class();
 
       bool us_Initialised;
-      // bool us_DebugMemory = false;
+#ifdef DEBUG_USBSID_MEMORY
+      bool us_DebugMemory = false;
+#endif
 
       /* USBSID related */
-      int USBSID_Init(bool start_threaded);
+      int USBSID_Init(bool start_threaded, bool with_cycles);
       int USBSID_Close(void);
       void USBSID_Pause(void);
       void USBSID_Reset(void);
@@ -167,13 +187,14 @@ namespace USBSID_NS
 
       /* Synchronous write */
       void USBSID_SingleWrite(unsigned char *buff, size_t len);  /* Write buffer of size_t ~ for config writing */
+
       /* Asynchronous Write */
       void USBSID_Write(unsigned char *buff, size_t len);  /* Write buffer of size_t len */
+      void USBSID_Write(unsigned char *buff, size_t len, uint16_t cycles);  /* Wait n cycles, write buffer of size_t len */
       void USBSID_Write(uint8_t reg, uint8_t val);  /* Write register and value */
-      void USBSID_Write(unsigned char *buff, size_t len, uint16_t cycles);  /* Wait n cycles and write buffer of size_t len */
-      void USBSID_Write(uint8_t reg, uint8_t val, uint16_t cycles);  /* Wait n cycles and write register and value */
-      // void USBSID_WriteCycled(unsigned char *buff, size_t len, uint8_t cycles);  /* Write buffer of size_t len, USBSID uses cycles for delay */
+      void USBSID_Write(uint8_t reg, uint8_t val, uint16_t cycles);  /* Wait n cycles, write register and value */
       void USBSID_WriteCycled(uint8_t reg, uint8_t val, uint16_t cycles);  /* Write register and value, USBSID uses cycles for delay */
+
       /* Asynchronous Read */
       unsigned char USBSID_Read(unsigned char *writebuff, unsigned char *buff);  /* Write buffer and return read buffer */
       unsigned char USBSID_Read(unsigned char *writebuff, unsigned char *buff, uint16_t cycles);  /* Wait for n cycles and write buffer and return read buffer */
@@ -183,41 +204,35 @@ namespace USBSID_NS
       void USBSID_RingPushCycled(uint8_t reg, uint8_t val, uint16_t cycles);
 
       /* Thread related */
-      // void (*thread_handler_ptr[3])() = {USBSID_FillBuffer, USBSID_FillMemory, USBSID_RingPop};
-      // static void *usbsid_threadfiller(void *context)
-      // {
-      //   return ((USBSID_Class *)context)->USBSID_FillBuffer();
-      // }
-      // static void *usbsid_thread(void *context, void ( *f )(void))
-      // {
-      //     return ((USBSID_Class *)context)->USBSID_Thread(f);
-      // }
-      static void *usbsid_thread(void *context)
-      {
-          return ((USBSID_Class *)context)->USBSID_Thread();
+      void USBSID_RestartThread(bool with_cycles);
+      static void *_USBSID_Thread(void *context)
+      { /* Required for supplying private function to pthread_create */
+        return ((USBSID_Class *)context)->USBSID_Thread();
       }
 
       /* Bus related */
       uint8_t USBSID_Address(uint16_t addr);
 
-      /* Timing and Cycle related */
+      /* Timing related */
       typedef std::chrono::high_resolution_clock::time_point timestamp_t;
       typedef std::chrono::nanoseconds  duration_t;
       typedef std::nano                 ratio_t;
-      timestamp_t m_StartTime = std::chrono::high_resolution_clock::now();
-      timestamp_t m_NextTime = std::chrono::high_resolution_clock::now();
+      timestamp_t m_StartTime   = std::chrono::high_resolution_clock::now();
+      timestamp_t m_NextTime    = std::chrono::high_resolution_clock::now();
       timestamp_t m_CurrentTime = std::chrono::high_resolution_clock::now();
-      double m_CPUcycleDuration = ratio_t::den / cycles_per_sec;
+      /* Cycle related */
+      double m_CPUcycleDuration               = ratio_t::den / cycles_per_sec;
       double m_InvCPUcycleDurationNanoSeconds = 1.0 / (1000000000 / cycles_per_sec);
-
-      int USBSID_WaitForCycle(unsigned int cycles);
-      int64_t USBSID_CycleFromTimestamp(timestamp_t timestamp);
+      /* Cycle based functions */
+      int_fast64_t USBSID_WaitForCycle(uint_fast16_t cycles);
+      int_fast64_t USBSID_CycleFromTimestamp(timestamp_t timestamp);
 
   };
 
 } /* USBSIDDriver */
 
 
+#pragma GCC diagnostic pop
 #pragma GCC pop_options
 
 #endif /* _USBSID_H_ */

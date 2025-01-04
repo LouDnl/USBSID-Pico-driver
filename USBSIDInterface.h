@@ -24,25 +24,37 @@
  */
 
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-  /* TODO: Incomplete */
+  /* USBSID */
   typedef void * USBSIDitf;
-  USBSIDitf create_USBSID();
-  int init_USBSID(USBSIDitf, bool set_async);
+  USBSIDitf create_USBSID(void);
+  int init_USBSID(USBSIDitf, bool start_threaded, bool with_cycles);
+  void restartthread_USBSID(USBSIDitf, bool with_cycles);
   void close_USBSID(USBSIDitf);
   void pause_USBSID(USBSIDitf);
   void reset_USBSID(USBSIDitf);
   void setclockrate_USBSID(USBSIDitf, long clockrate_cycles);
+
+  /* Synchronous */
   void writesingle_USBSID(USBSIDitf, unsigned char *buff, size_t len);
+
+  /* Asynchronous */
   void writebuffer_USBSID(USBSIDitf, unsigned char *buff, size_t len);
-  void write_USBSID(USBSIDitf, uint16_t reg, uint8_t val, uint8_t cycles);
+  void write_USBSID(USBSIDitf, uint16_t reg, uint8_t val);
+  void writecycled_USBSID(USBSIDitf, uint16_t reg, uint8_t val, uint16_t cycles);
   unsigned char read_USBSID(USBSIDitf, unsigned char *writebuff, unsigned char *buff);
-  void ringpush_USBSID(USBSIDitf, uint16_t reg, uint8_t val, uint8_t cycles);
-  int waitforcycle_USBSID(unsigned int cycles);
+
+  /* Ringbuffer */
+  void ringpush_USBSID(USBSIDitf, uint16_t reg, uint8_t val);
+  void ringpushcycled_USBSID(USBSIDitf, uint16_t reg, uint8_t val, uint16_t cycles);
+
+  /* Timing */
+  int_fast64_t waitforcycle_USBSID(USBSIDitf, uint_fast64_t cycles);
 
 #ifdef __cplusplus
 }
