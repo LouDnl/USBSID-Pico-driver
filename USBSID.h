@@ -224,8 +224,8 @@ namespace USBSID_NS
       double m_CPUcycleDuration               = ratio_t::den / cycles_per_sec;
       double m_InvCPUcycleDurationNanoSeconds = 1.0 / (1000000000 / cycles_per_sec);
       /* Cycle based functions */
-      int_fast64_t USBSID_WaitForCycle(uint_fast16_t cycles);
-      int_fast64_t USBSID_CycleFromTimestamp(timestamp_t timestamp);
+      uint_fast64_t USBSID_WaitForCycle(uint_fast16_t cycles);
+      uint_fast64_t USBSID_CycleFromTimestamp(timestamp_t timestamp);
 
   };
 

@@ -530,14 +530,14 @@ void USBSID_Class::USBSID_DebugPrint(void)
 
 /* TIMING AND CYCLES */
 
-int_fast64_t USBSID_Class::USBSID_CycleFromTimestamp(timestamp_t timestamp)
+uint_fast64_t USBSID_Class::USBSID_CycleFromTimestamp(timestamp_t timestamp)
 {
   m_InvCPUcycleDurationNanoSeconds = 1.0 / (1000000000 / cycles_per_sec);
   auto nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(timestamp - m_StartTime);
   return (int64_t)(nsec.count() * m_InvCPUcycleDurationNanoSeconds);
 }
 
-int_fast64_t USBSID_Class::USBSID_WaitForCycle(uint_fast16_t cycles)
+uint_fast64_t USBSID_Class::USBSID_WaitForCycle(uint_fast16_t cycles)
 {
     timestamp_t now = std::chrono::high_resolution_clock::now();
     /* double dur = cycles * m_InvCPUcycleDurationNanoSeconds; */
