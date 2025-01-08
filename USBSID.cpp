@@ -539,28 +539,28 @@ uint_fast64_t USBSID_Class::USBSID_CycleFromTimestamp(timestamp_t timestamp)
 
 uint_fast64_t USBSID_Class::USBSID_WaitForCycle(uint_fast16_t cycles)
 {
-    timestamp_t now = std::chrono::high_resolution_clock::now();
-    /* double dur = cycles * m_InvCPUcycleDurationNanoSeconds; */
-    double dur = cycles * m_CPUcycleDuration;
-    duration_t duration = (duration_t)(int_fast64_t)dur;
-    auto target_time = m_NextTime + duration;
-    auto target_delta = target_time - now;
-    /* auto wait_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(target_delta * 1000); */
-    auto wait_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(target_delta);
-    auto wait_msec = std::chrono::duration_cast<std::chrono::milliseconds>(target_delta);
-    if (wait_nsec.count() > 0) {
-        std::this_thread::sleep_for(wait_nsec);
-    }
+  timestamp_t now = std::chrono::high_resolution_clock::now();
+  /* double dur = cycles * m_InvCPUcycleDurationNanoSeconds; */
+  double dur = cycles * m_CPUcycleDuration;
+  duration_t duration = (duration_t)(int_fast64_t)dur;
+  auto target_time = m_NextTime + duration;
+  auto target_delta = target_time - now;
+  /* auto wait_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(target_delta * 1000); */
+  auto wait_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(target_delta);
+  // auto wait_msec = std::chrono::duration_cast<std::chrono::milliseconds>(target_delta);
+  if (wait_nsec.count() > 0) {
+      std::this_thread::sleep_for(wait_nsec);
+  }
 
-    while (now < target_time) {
-        now = std::chrono::high_resolution_clock::now();
-    }
-    m_CurrentTime       = now;
-    m_NextTime          = target_time;
+  while (now < target_time) {
+      now = std::chrono::high_resolution_clock::now();
+  }
+  m_CurrentTime       = now;
+  m_NextTime          = target_time;
 
-    /* ISSUE: returned cycles seem incorrect but does not affect playing */
-    int_fast64_t waited_cycles = (wait_nsec.count() * m_InvCPUcycleDurationNanoSeconds);
-    return waited_cycles;
+  /* ISSUE: returned cycles seem incorrect but does not affect playing */
+  int_fast64_t waited_cycles = (wait_nsec.count() * m_InvCPUcycleDurationNanoSeconds);
+  return waited_cycles;
 }
 
 
