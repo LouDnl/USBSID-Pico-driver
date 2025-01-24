@@ -77,13 +77,13 @@ extern "C"
     if( p == NULL ) return 0;
     return ((USBSID_Class*)p)->USBSID_Read(writebuff, buff);
   };
-  void ringpush_USBSID(USBSIDitf p, uint16_t reg, uint8_t val){
+  void writering_USBSID(USBSIDitf p, uint16_t reg, uint8_t val){
     if( p == NULL ) return;
-    return ((USBSID_Class*) p)->USBSID_RingPush(reg, val);
+    return ((USBSID_Class*) p)->USBSID_WriteRing(reg, val);
   };
-  void ringpushcycled_USBSID(USBSIDitf p, uint16_t reg, uint8_t val, uint16_t cycles){
+  void writeringcycled_USBSID(USBSIDitf p, uint16_t reg, uint8_t val, uint16_t cycles){
     if( p == NULL ) return;
-    return ((USBSID_Class*) p)->USBSID_RingPushCycled(reg, val, cycles);
+    return ((USBSID_Class*) p)->USBSID_WriteRingCycled(reg, val, cycles);
   };
   int_fast64_t waitforcycle_USBSID(USBSIDitf p, uint_fast64_t cycles){
     if( p == NULL ) return 0;

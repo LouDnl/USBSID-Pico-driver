@@ -40,18 +40,18 @@ extern "C" {
   void reset_USBSID(USBSIDitf);
   void setclockrate_USBSID(USBSIDitf, long clockrate_cycles);
 
-  /* Synchronous */
+  /* Synchronous direct */
   void writesingle_USBSID(USBSIDitf, unsigned char *buff, size_t len);
 
-  /* Asynchronous */
+  /* Asynchronous direct */
   void writebuffer_USBSID(USBSIDitf, unsigned char *buff, size_t len);
   void write_USBSID(USBSIDitf, uint16_t reg, uint8_t val);
   void writecycled_USBSID(USBSIDitf, uint16_t reg, uint8_t val, uint16_t cycles);
   unsigned char read_USBSID(USBSIDitf, unsigned char *writebuff, unsigned char *buff);
 
-  /* Ringbuffer */
-  void ringpush_USBSID(USBSIDitf, uint16_t reg, uint8_t val);
-  void ringpushcycled_USBSID(USBSIDitf, uint16_t reg, uint8_t val, uint16_t cycles);
+  /* Asynchronous thread */
+  void writering_USBSID(USBSIDitf, uint16_t reg, uint8_t val);
+  void writeringcycled_USBSID(USBSIDitf, uint16_t reg, uint8_t val, uint16_t cycles);
 
   /* Timing */
   int_fast64_t waitforcycle_USBSID(USBSIDitf, uint_fast64_t cycles);
