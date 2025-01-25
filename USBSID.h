@@ -25,8 +25,11 @@
 
 #ifndef _USBSID_H_
 #define _USBSID_H_
+
+#ifdef USBSID_OPTOFF
 #pragma GCC push_options
 #pragma GCC optimize ("O0")
+#endif
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
 
@@ -120,14 +123,14 @@ namespace USBSID_NS
   static int rc, read_completed, write_completed;
 
   /* USB buffer related */
-  static uint8_t * in_buffer;     /* incoming libusb will reside in this buffer */
-  static uint8_t * out_buffer;    /* outgoing libusb will reside in this buffer */
-  static uint8_t * thread_buffer; /*  */
-  static uint8_t * write_buffer;  /* non async data will be written from this buffer */
+  static uint8_t * __restrict__ in_buffer;     /* incoming libusb will reside in this buffer */
+  static uint8_t * __restrict__ out_buffer;    /* outgoing libusb will reside in this buffer */
+  static uint8_t * __restrict__ thread_buffer; /* data to be transfered to the out_buffer will reside in this buffer */
+  static uint8_t * __restrict__ write_buffer;  /* non async data will be written from this buffer */
 #ifdef DEBUG_USBSID_MEMORY
-  static uint8_t * temp_buffer;   /* temp buffer for debug printing */
+  static uint8_t * __restrict__ temp_buffer;   /* temp buffer for debug printing */
 #endif
-  static uint8_t * result;        /* variable where read data is copied into */
+  static uint8_t * __restrict__ result;        /* variable where read data is copied into */
   static int len_out_buffer;      /* changable variable for out buffer size */
   static int buffer_pos = 1;      /* current position of the out buffer */
   static int flush_buffer = 0;    /* flush buffer yes or no */
@@ -230,7 +233,8 @@ namespace USBSID_NS
       /* TODO: Add function to retrieve the amount of sids configured */
 
       /* Synchronous direct */
-      void USBSID_SingleWrite(unsigned char *buff, size_t len);  /* Write buffer of size_t ~ for config writing */
+      void USBSID_SingleWrite(unsigned char *buff, size_t len);  /* Single write buffer of size_t ~ example: config writing */
+      unsigned char USBSID_SingleRead(uint8_t reg);              /* Single read register, return result */
 
       /* Asynchronous direct */
       void USBSID_Write(unsigned char *buff, size_t len);                   /* Write buffer of size_t len */
@@ -238,12 +242,13 @@ namespace USBSID_NS
       void USBSID_Write(unsigned char *buff, size_t len, uint16_t cycles);  /* Wait n cycles, write buffer of size_t len */
       void USBSID_Write(uint8_t reg, uint8_t val, uint16_t cycles);         /* Wait n cycles, write register and value */
       void USBSID_WriteCycled(uint8_t reg, uint8_t val, uint16_t cycles);   /* Write register and value, USBSID uses cycles for delay */
-      unsigned char USBSID_Read(unsigned char *writebuff, unsigned char *buff);  /* Write buffer and return read buffer */
-      unsigned char USBSID_Read(unsigned char *writebuff, unsigned char *buff, uint16_t cycles);  /* Wait for n cycles and write buffer and return read buffer */
+      unsigned char USBSID_Read(unsigned char *writebuff);                  /* Write buffer, return result */
+      unsigned char USBSID_Read(unsigned char *writebuff, uint16_t cycles); /* Wait for n cycles and write buffer, return result */
 
       /* Asynchronous thread */
       void USBSID_WriteRing(uint8_t reg, uint8_t val);
       void USBSID_WriteRingCycled(uint8_t reg, uint8_t val, uint16_t cycles);
+
       /* Thread buffer */
       void USBSID_SetFlush(void);
       void USBSID_Flush(void);
@@ -276,8 +281,9 @@ namespace USBSID_NS
 
 } /* USBSIDDriver */
 
-
+#ifdef USBSID_OPTOFF
 #pragma GCC diagnostic pop
 #pragma GCC pop_options
+#endif
 
 #endif /* _USBSID_H_ */

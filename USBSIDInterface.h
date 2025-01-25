@@ -34,24 +34,34 @@ extern "C" {
   typedef void * USBSIDitf;
   USBSIDitf create_USBSID(void);
   int init_USBSID(USBSIDitf, bool start_threaded, bool with_cycles);
-  void restartthread_USBSID(USBSIDitf, bool with_cycles);
   void close_USBSID(USBSIDitf);
   void pause_USBSID(USBSIDitf);
   void reset_USBSID(USBSIDitf);
   void setclockrate_USBSID(USBSIDitf, long clockrate_cycles);
+  long getclockrate_USBSID(USBSIDitf);
+  long getrefreshrate_USBSID(USBSIDitf);
+  /* TODO: Add all remaining namespace functions */
 
   /* Synchronous direct */
   void writesingle_USBSID(USBSIDitf, unsigned char *buff, size_t len);
+  unsigned char readsingle_USBSID(USBSIDitf, uint8_t reg);
 
   /* Asynchronous direct */
   void writebuffer_USBSID(USBSIDitf, unsigned char *buff, size_t len);
   void write_USBSID(USBSIDitf, uint16_t reg, uint8_t val);
   void writecycled_USBSID(USBSIDitf, uint16_t reg, uint8_t val, uint16_t cycles);
-  unsigned char read_USBSID(USBSIDitf, unsigned char *writebuff, unsigned char *buff);
+  unsigned char read_USBSID(USBSIDitf, unsigned char *writebuff);
 
   /* Asynchronous thread */
   void writering_USBSID(USBSIDitf, uint16_t reg, uint8_t val);
   void writeringcycled_USBSID(USBSIDitf, uint16_t reg, uint8_t val, uint16_t cycles);
+
+  /* Thread Buffer */
+  void setflush_USBSID(USBSIDitf);
+  void flush_USBSID(USBSIDitf);
+
+  /* Thread related */
+  void restartthread_USBSID(USBSIDitf, bool with_cycles);
 
   /* Timing */
   int_fast64_t waitforcycle_USBSID(USBSIDitf, uint_fast64_t cycles);

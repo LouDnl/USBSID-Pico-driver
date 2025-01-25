@@ -23,8 +23,10 @@
  *
  */
 
+#ifdef USBSID_OPTOFF
 #pragma GCC push_options
 #pragma GCC optimize ("O0")
+#endif
 
 #include "USBSID.h"
 
@@ -59,6 +61,7 @@ USBSID_Class::~USBSID_Class()
   if (write_buffer) free(write_buffer);
   if (thread_buffer) free(thread_buffer);
   if (result) free(result);
+  thread_buffer = NULL;
   write_buffer = NULL;
   result = NULL;
 #ifdef DEBUG_USBSID_MEMORY
@@ -198,6 +201,24 @@ void USBSID_Class::USBSID_SingleWrite(unsigned char *buff, size_t len)
   }
 }
 
+unsigned char USBSID_Class::USBSID_SingleRead(uint8_t reg)
+{
+  int actual_length;
+  unsigned char buff[3] = {(READ << 6), reg, 0};
+  if (libusb_bulk_transfer(devh, EP_OUT_ADDR, buff, 3, &actual_length, 0) < 0) {
+    USBERR(stderr, "[USBSID] Error while sending write command for reading\n");
+  }
+  rc = libusb_bulk_transfer(devh, EP_IN_ADDR, result, 1, &actual_length, 0);
+  if (rc == LIBUSB_ERROR_TIMEOUT) {
+    USBERR(stderr, "[USBSID] Timeout error while reading (%d)\n", actual_length);
+    return 0;
+  } else if (rc < 0) {
+    USBERR(stderr, "[USBSID] Error while waiting for char while reading\n");
+    return 0;
+  }
+  return result[0];
+}
+
 
 /* ASYNCHRONOUS */
 
@@ -268,7 +289,7 @@ void USBSID_Class::USBSID_WriteCycled(uint8_t reg, uint8_t val, uint16_t cycles)
   USBSID_Write(write_buffer, 5);
 }
 
-unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff, unsigned char *buff)
+unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff)
 {
   if (threaded == 0 && withcycles == 0) {  /* Reading not supported with threaded writes */
     read_completed = write_completed = 0;
@@ -283,7 +304,7 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff, unsigned char 
   return 0xFF;
 }
 
-unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff, unsigned char *buff, uint16_t cycles)
+unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff, uint16_t cycles)
 {
   if (threaded == 0) {  /* Reading not supported with threaded writes */
     USBSID_WaitForCycle(cycles);
@@ -339,7 +360,7 @@ void* USBSID_Class::USBSID_Thread(void)
     USBDBG(stdout, "[USBSID] Thread with cycles\r\n");
   }
   while(run_thread) {
-    if (flush_buffer == 1) {
+    if (withcycles && flush_buffer == 1) {
       USBSID_FlushBuffer();
     }
     while (ringbuffer.ring_read != ringbuffer.ring_write) {
@@ -745,6 +766,9 @@ void USBSID_Class::LIBUSB_InitOutBuffer(void)
   libusb_fill_bulk_transfer(transfer_out, devh, EP_OUT_ADDR, out_buffer, len_out_buffer, usb_out, NULL, 0);
   USBDBG(stdout, "[USBSID] libusb_fill_bulk_transfer transfer_out complete\r\n");
 
+  if (thread_buffer == NULL) {
+    thread_buffer = (uint8_t*)malloc((sizeof(uint8_t)) * (len_out_buffer));
+  }
   if (write_buffer == NULL) {
     write_buffer = (uint8_t*)malloc((sizeof(uint8_t)) * (len_out_buffer));
   }
@@ -836,7 +860,9 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
   threaded = start_threaded;
   withcycles = with_cycles;
   len_out_buffer = LEN_OUT_BUFFER;
-  thread_buffer = (uint8_t*)malloc((sizeof(uint8_t)) * (LEN_OUT_BUFFER));
+  write_buffer = (uint8_t*)malloc((sizeof(uint8_t)) * (len_out_buffer));
+  thread_buffer = (uint8_t*)malloc((sizeof(uint8_t)) * (len_out_buffer));
+  result = (uint8_t*)malloc((sizeof(uint8_t)) * (LEN_IN_BUFFER));
 #ifdef DEBUG_USBSID_MEMORY
   temp_buffer = (uint8_t*)malloc((sizeof(uint8_t)) * (LEN_TMP_BUFFER));
 #endif
@@ -937,4 +963,6 @@ void LIBUSB_CALL USBSID_Class::usb_in(struct libusb_transfer *transfer)
 
 } /* extern "C" */
 
+#ifdef USBSID_OPTOFF
 #pragma GCC pop_options
+#endif
