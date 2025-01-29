@@ -49,6 +49,10 @@ extern "C"
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_Reset();
   };
+  void resetallregisters_USBSID(USBSIDitf p){
+    if( p == NULL ) return;
+    return ((USBSID_Class*)p)->USBSID_ResetAllRegisters();
+  };
   void setclockrate_USBSID(USBSIDitf p, long clockrate_cycles){
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_SetClockRate(clockrate_cycles);

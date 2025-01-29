@@ -54,7 +54,9 @@
 /* #define USBSID_DEBUG */
 #ifdef USBSID_DEBUG
   #define USBDBG(...) fprintf(__VA_ARGS__)
-  #define DEBUG_USBSID_MEMORY
+  #ifdef USBSID_MEMDEBUG
+    #define DEBUG_USBSID_MEMORY
+  #endif
 #else
   #define USBDBG(...) ((void)0)
 #endif
@@ -165,6 +167,10 @@ namespace USBSID_NS
   static long cycles_per_sec = DEFAULT;  /* default @ 1000000 */
   static long cycles_per_frame = HZ_DEFAULT;  /* default @ 22000 */
 
+  typedef std::nano                 ratio_t;
+  static double m_CPUcycleDuration               = ratio_t::den / cycles_per_sec;
+  static double m_InvCPUcycleDurationNanoSeconds = 1.0 / (1000000000 / cycles_per_sec);
+
   class USBSID_Class {
     private:
 
@@ -221,7 +227,7 @@ namespace USBSID_NS
       int USBSID_Close(void);
       void USBSID_Pause(void);
       void USBSID_Reset(void);
-      void USBSID_ResetAll(void);
+      void USBSID_ResetAllRegisters(void);
       void USBSID_Mute(void);
       void USBSID_UnMute(void);
       void USBSID_DisableSID(void);
@@ -267,13 +273,13 @@ namespace USBSID_NS
       /* Timing related */
       typedef std::chrono::high_resolution_clock::time_point timestamp_t;
       typedef std::chrono::nanoseconds  duration_t;
-      typedef std::nano                 ratio_t;
+      // typedef std::nano                 ratio_t;
       timestamp_t m_StartTime   = std::chrono::high_resolution_clock::now();
       timestamp_t m_NextTime    = std::chrono::high_resolution_clock::now();
       timestamp_t m_CurrentTime = std::chrono::high_resolution_clock::now();
       /* Cycle related */
-      double m_CPUcycleDuration               = ratio_t::den / cycles_per_sec;
-      double m_InvCPUcycleDurationNanoSeconds = 1.0 / (1000000000 / cycles_per_sec);
+      // static double m_CPUcycleDuration               = ratio_t::den / cycles_per_sec;
+      // static double m_InvCPUcycleDurationNanoSeconds = 1.0 / (1000000000 / cycles_per_sec);
       /* Cycle based functions */
       uint_fast64_t USBSID_WaitForCycle(uint_fast16_t cycles);
       uint_fast64_t USBSID_CycleFromTimestamp(timestamp_t timestamp);

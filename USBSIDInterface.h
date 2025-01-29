@@ -37,6 +37,7 @@ extern "C" {
   void close_USBSID(USBSIDitf);
   void pause_USBSID(USBSIDitf);
   void reset_USBSID(USBSIDitf);
+  void resetallregisters_USBSID(USBSIDitf);
   void setclockrate_USBSID(USBSIDitf, long clockrate_cycles);
   long getclockrate_USBSID(USBSIDitf);
   long getrefreshrate_USBSID(USBSIDitf);

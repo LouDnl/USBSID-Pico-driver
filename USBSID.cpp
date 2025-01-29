@@ -120,9 +120,9 @@ void USBSID_Class::USBSID_Reset(void)
   USBSID_SingleWrite(buff, 3);
 }
 
-void USBSID_Class::USBSID_ResetAll(void)
+void USBSID_Class::USBSID_ResetAllRegisters(void)
 {
-  USBDBG(stdout, "[USBSID] Reset All\r\n");
+  USBDBG(stdout, "[USBSID] Reset All Registers\r\n");
   unsigned char buff[3] = {(COMMAND << 6 | RESET_SID), 0x1, 0x0};
   USBSID_SingleWrite(buff, 3);
 }
@@ -169,8 +169,11 @@ void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles)
       cycles_per_sec = clockrate_cycles;
       cycles_per_frame = refreshRate[i];
       m_CPUcycleDuration = ratio_t::den / cycles_per_sec;
-      m_InvCPUcycleDurationNanoSeconds = 1.0 / (1000000000 / cycles_per_sec);
+      m_InvCPUcycleDurationNanoSeconds = ratio_t::den / (1000000000 / cycles_per_sec);
       USBDBG(stdout, "[USBSID] Set clockspeed to: [i]%d ~ [r]%ld\n", (int)clockSpeed[i], cycles_per_sec);
+      USBDBG(stdout, "[USBSID] m_CPUcycleDuration %f\n", m_CPUcycleDuration);
+      USBDBG(stdout, "[USBSID] m_InvCPUcycleDurationNanoSeconds %f\n", m_InvCPUcycleDurationNanoSeconds);
+      USBDBG(stdout, "[USBSID] cycles_per_frame %ld\n", cycles_per_frame);
       uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x50, i, 0, 0, 0};
       USBSID_SingleWrite(configbuff, 6);
       return;
@@ -336,8 +339,13 @@ void USBSID_Class::USBSID_SetFlush(void)
 
 void USBSID_Class::USBSID_FlushBuffer(void)
 {
-  if (flush_buffer == 1 && buffer_pos >= 5) {
-    thread_buffer[0] = (CYCLED_WRITE << 6 | (buffer_pos - 1));
+  if (threaded && flush_buffer == 1
+    && ((withcycles == 1)
+    ? (buffer_pos >= 5)
+    : (buffer_pos >= 3))) {
+    thread_buffer[0] = (withcycles == 1)
+      ? (CYCLED_WRITE << 6 | (buffer_pos - 1))
+      : (WRITE << 6 | (buffer_pos - 1));
     memcpy(out_buffer, thread_buffer, buffer_pos);
     buffer_pos = 1;
     flush_buffer = 0;
@@ -345,6 +353,8 @@ void USBSID_Class::USBSID_FlushBuffer(void)
     libusb_handle_events_completed(ctx, NULL);
     memset(thread_buffer, 0, 64);
     memset(out_buffer, 0, len_out_buffer);
+  } else {
+    flush_buffer = 0;
   }
 }
 
@@ -360,7 +370,7 @@ void* USBSID_Class::USBSID_Thread(void)
     USBDBG(stdout, "[USBSID] Thread with cycles\r\n");
   }
   while(run_thread) {
-    if (withcycles && flush_buffer == 1) {
+    if (flush_buffer == 1) {
       USBSID_FlushBuffer();
     }
     while (ringbuffer.ring_read != ringbuffer.ring_write) {
@@ -471,11 +481,20 @@ void USBSID_Class::USBSID_RingPop(void)
   ringbuffer.ringpop = ringbuffer.ring_buffer[ringbuffer.ring_read++];
 
   /* Ex: 0xD418 */
-  out_buffer[0] = 0x0;
-  out_buffer[1] = (uint8_t)(ringbuffer.ringpop >> 8);
-  out_buffer[2] = (uint8_t)(ringbuffer.ringpop & 0xFF);
-  libusb_submit_transfer(transfer_out);
-  libusb_handle_events_completed(ctx, NULL);
+  thread_buffer[buffer_pos++] = (uint8_t)(ringbuffer.ringpop >> 8);
+  thread_buffer[buffer_pos++] = (uint8_t)(ringbuffer.ringpop & 0xFF);
+  if (buffer_pos == 63  /* >= 61 || >= 4 */
+    || buffer_pos == len_out_buffer
+    || flush_buffer == 1) {
+    flush_buffer = 0;
+    thread_buffer[0] = (WRITE << 6 | (buffer_pos - 1));
+    memcpy(out_buffer, thread_buffer, buffer_pos);
+    buffer_pos = 1;
+    libusb_submit_transfer(transfer_out);
+    libusb_handle_events_completed(ctx, NULL);
+    memset(thread_buffer, 0, 64);
+    memset(out_buffer, 0, len_out_buffer);
+  }
 }
 
 uint8_t * USBSID_Class::USBSID_RingPop(bool return_busvalue)
@@ -645,7 +664,7 @@ uint_fast64_t USBSID_Class::USBSID_WaitForCycle(uint_fast16_t cycles)
   auto target_delta = target_time - now;
   /* auto wait_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(target_delta * 1000); */
   auto wait_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(target_delta);
-  // auto wait_msec = std::chrono::duration_cast<std::chrono::milliseconds>(target_delta);
+  auto wait_msec = std::chrono::duration_cast<std::chrono::milliseconds>(target_delta);
   if (wait_nsec.count() > 0) {
       std::this_thread::sleep_for(wait_nsec);
   }
@@ -658,6 +677,10 @@ uint_fast64_t USBSID_Class::USBSID_WaitForCycle(uint_fast16_t cycles)
 
   /* ISSUE: returned cycles seem incorrect but does not affect playing */
   int_fast64_t waited_cycles = (wait_nsec.count() * m_InvCPUcycleDurationNanoSeconds);
+  // int_fast64_t waited_cycles2 = (wait_msec.count() / m_CPUcycleDuration);
+  // printf("cycles_per_sec: %lu cycles: %lu waited_cycles: %lu wait_nsec: %ld wait_msec: %ld dur: %fu invdur: %f\n",
+  //   cycles_per_sec, cycles, waited_cycles, wait_nsec, wait_msec,
+  //   m_CPUcycleDuration, m_InvCPUcycleDurationNanoSeconds);
   return waited_cycles;
 }
 
@@ -909,7 +932,7 @@ int USBSID_Class::LIBUSB_Exit(void)
 {
 
   LIBUSB_StopThread();
-  USBSID_Reset();
+  USBSID_ResetAllRegisters();
   LIBUSB_StopTransfers();
   LIBUSB_FreeInBuffer();
   LIBUSB_FreeOutBuffer();
