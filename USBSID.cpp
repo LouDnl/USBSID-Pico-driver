@@ -910,6 +910,7 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
   if (LIBUSB_ConfigureDevice() < 0) {
     goto out;
   }
+  USBSID_Reset();
   LIBUSB_InitOutBuffer();
   LIBUSB_InitInBuffer();
 
@@ -932,7 +933,7 @@ int USBSID_Class::LIBUSB_Exit(void)
 {
 
   LIBUSB_StopThread();
-  USBSID_ResetAllRegisters();
+  USBSID_Reset();
   LIBUSB_StopTransfers();
   LIBUSB_FreeInBuffer();
   LIBUSB_FreeOutBuffer();
