@@ -8,6 +8,7 @@
 !*.h
 !*.hpp
 !*.js
+!*.am
 
 # And not these specific files
 !.gitignore
