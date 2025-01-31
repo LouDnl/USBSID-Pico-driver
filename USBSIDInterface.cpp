@@ -53,6 +53,10 @@ extern "C"
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_ResetAllRegisters();
   };
+  void clearbus_USBSID(USBSIDitf p){
+    if( p == NULL ) return;
+    return ((USBSID_Class*)p)->USBSID_ClearBus();
+  };
   void mute_USBSID(USBSIDitf p){
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_Mute();
