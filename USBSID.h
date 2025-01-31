@@ -104,13 +104,14 @@ namespace USBSID_NS
   };
 
   /* Thread related */
-  static int exit_thread;
   static int run_thread;
 
   /* Fake C64 Memory */
+  #ifdef DEBUG_USBSID_MEMORY
   static uint8_t sid_memory[0x20];
   static uint8_t sid_memory_changed[0x20];
   static uint16_t sid_memory_cycles[0x20];
+  #endif
 
   /* LIBUSB related */
   static struct libusb_device_handle *devh = NULL;
@@ -154,7 +155,7 @@ namespace USBSID_NS
       NTSC    = 1022730,  /* 1.023 MHz = 0.977778 us */
       DREAN   = 1023440,  /* 1.023 MHz = 0.977097 us */
   };
-  /* Refreshrates in microseconds */
+  /* Refreshrates (cycles) in microseconds */
   enum refresh_rates
   {
       HZ_DEFAULT = 20000,  /* 50Hz ~ 20000 == 20 us */
@@ -162,19 +163,51 @@ namespace USBSID_NS
       HZ_US      = 16715,  /* 60Hz ~ 16667 == 16.67 us / 59.826Hz ~ 16.715140574332 exact */
       HZ_GLOBAL  = 16715,  /* 60Hz ~ 16667 == 16.67 us / 59.826Hz ~ 16.715140574332 exact */
   };
-  static const enum clock_speeds clockSpeed[] = { DEFAULT, PAL, NTSC, DREAN };
+  /* Rasterrates (cycles) in microseconds
+   * Source: https://www.c64-wiki.com/wiki/raster_time
+   *
+   * PAL: 1 horizontal raster line takes 63 cycles
+   * or 504 pixels including side borders
+   * whole screen consists of 312 horizontal lines
+   * for a frame including upper and lower borders
+   * 63 * 312 CPU cycles is 19656 for a complete
+   * frame update @ 985248 Hertz
+   * 985248 / 19656 = approx 50.12 Hz frame rate
+   *
+   * NTSC: 1 horizontal raster line takes 65 cycles
+   * whole screen consists of 263 rasters per frame
+   * 65 * 263 CPU cycles is 17096 for a complete
+   * frame update @ 985248 Hertz
+   * 1022727 / 17096 = approx 59.83 Hz frame rate
+   *
+   */
+  enum raster_rates
+  {
+    R_DEFAULT = 20000,  /* 20us  ~ fallback */
+    R_EU      = 19656,  /* PAL:  63 cycles * 312 lines = 19656 cycles per frame update @  985248 Hz = 50.12 Hz frame rate */
+    R_US      = 17096,  /* NTSC: 65 cycles * 263 lines = 17096 cycles per frame update @ 1022727 Hz = 59.83 Hz Hz frame rate */
+    R_GLOBAL  = 17096,  /* NTSC */
+  };
+  static const enum clock_speeds clockSpeed[]   = { DEFAULT, PAL, NTSC, DREAN };
   static const enum refresh_rates refreshRate[] = { HZ_DEFAULT, HZ_EU, HZ_US, HZ_GLOBAL };
-  static long cycles_per_sec = DEFAULT;  /* default @ 1000000 */
-  static long cycles_per_frame = HZ_DEFAULT;  /* default @ 22000 */
+  static const enum raster_rates rasterRate[]   = { R_DEFAULT, R_EU, R_US, R_GLOBAL };
+  static long cycles_per_sec    = DEFAULT;     /* default @ 1000000 */
+  static long cycles_per_frame  = HZ_DEFAULT;  /* default @ 20000 */
+  static long cycles_per_raster = R_DEFAULT;   /* default @ 20000 */
 
-  typedef std::nano                 ratio_t;
-  static double m_CPUcycleDuration               = ratio_t::den / cycles_per_sec;
-  static double m_InvCPUcycleDurationNanoSeconds = 1.0 / (1000000000 / cycles_per_sec);
+  /* Timing related */
+  typedef std::nano                                      ratio_t;      /* 1000000000 */
+  typedef std::chrono::high_resolution_clock::time_point timestamp_t;  /* Point in time */
+  typedef std::chrono::nanoseconds                       duration_t;   /* Duration in nanoseconds */
+  static double us_CPUcycleDuration               = ratio_t::den / (float)cycles_per_sec;          /* CPU cycle duration in nanoseconds */
+  static double us_InvCPUcycleDurationNanoSeconds = 1.0 / (ratio_t::den / (float)cycles_per_sec);  /* Inverted CPU cycle duration in nanoseconds */
+  static timestamp_t m_StartTime   = std::chrono::high_resolution_clock::now();
+  static timestamp_t m_LastTime    = m_StartTime;
 
   class USBSID_Class {
     private:
 
-      /* LIBUSB related */
+      /* LIBUSB */
       int LIBUSB_Setup(bool start_threaded, bool with_cycles);
       int LIBUSB_Exit(void);
       void LIBUSB_StopThread(void);
@@ -193,49 +226,48 @@ namespace USBSID_NS
       /* Line encoding ~ baud rate is ignored by TinyUSB */
       unsigned char encoding[7] = { 0x40, 0x54, 0x89, 0x00, 0x00, 0x00, 0x08 };  // 9000000 ~ 0x895440
 
-      /* Threading related */
+      /* Threading */
       void* USBSID_Thread(void);
       void USBSID_StopThread(void);
       int USBSID_IsRunning(void);
       pthread_t ptid;
 
-      /* Ringbuffer related */
+      /* Ringbuffer */
       void USBSID_RingPopCycled(void);  /* Threaded writer with cycles */
       void USBSID_RingPop(void);  /* Threaded writer */
       uint8_t * USBSID_RingPop(bool return_busvalue);  /* Threaded writer with return value */
       void USBSID_FlushBuffer(void);
 
-      /* SID memory related ~ Unused at the moment */
+      /* SID memory ~ Unused at the moment */
       void USBSID_FlushMemory(void);
       void USBSID_FillMemory(void);
       void USBSID_DebugPrint(void);
 
     public:
 
-      /* Constructor */
-      USBSID_Class();
-      /* Deconstructor */
-      ~USBSID_Class();
+      USBSID_Class();   /* Constructor */
+      ~USBSID_Class();  /* Deconstructor */
 
       bool us_Initialised;
 #ifdef DEBUG_USBSID_MEMORY
       bool us_DebugMemory = false;
 #endif
 
-      /* USBSID related */
+      /* USBSID */
       int USBSID_Init(bool start_threaded, bool with_cycles);
       int USBSID_Close(void);
-      void USBSID_Pause(void);
-      void USBSID_Reset(void);
-      void USBSID_ResetAllRegisters(void);
-      void USBSID_Mute(void);
-      void USBSID_UnMute(void);
-      void USBSID_DisableSID(void);
-      void USBSID_EnableSID(void);
-      void USBSID_ClearBus(void);
-      void USBSID_SetClockRate(long clockrate_cycles);
-      long USBSID_GetClockRate(void);
-      long USBSID_GetRefreshRate(void);
+      void USBSID_Pause(void);                          /* Pause playing by releasing chipselect pins */
+      void USBSID_Reset(void);                          /* Reset all SID chips */
+      void USBSID_ResetAllRegisters(void);              /* Reset register for all SID chips */
+      void USBSID_Mute(void);                           /* Mute all SID chips */
+      void USBSID_UnMute(void);                         /* UnMute all SID chips */
+      void USBSID_DisableSID(void);                     /* Release reset pin and unmute SID */
+      void USBSID_EnableSID(void);                      /* Assert reset pin and release chipselect pins */
+      void USBSID_ClearBus(void);                       /* Clear the SID bus from any data */
+      void USBSID_SetClockRate(long clockrate_cycles);  /* Set CPU clockrate in Hertz */
+      long USBSID_GetClockRate(void);                   /* Get CPU clockrate in Hertz  */
+      long USBSID_GetRefreshRate(void);                 /* Get cycles per refresh rate */
+      long USBSID_GetRasterRate(void);                  /* Get cycles per raster rate */
       /* TODO: Add function to retrieve the amount of sids configured */
 
       /* Synchronous direct */
@@ -243,46 +275,36 @@ namespace USBSID_NS
       unsigned char USBSID_SingleRead(uint8_t reg);              /* Single read register, return result */
 
       /* Asynchronous direct */
-      void USBSID_Write(unsigned char *buff, size_t len);                   /* Write buffer of size_t len */
-      void USBSID_Write(uint8_t reg, uint8_t val);                          /* Write register and value */
-      void USBSID_Write(unsigned char *buff, size_t len, uint16_t cycles);  /* Wait n cycles, write buffer of size_t len */
-      void USBSID_Write(uint8_t reg, uint8_t val, uint16_t cycles);         /* Wait n cycles, write register and value */
-      void USBSID_WriteCycled(uint8_t reg, uint8_t val, uint16_t cycles);   /* Write register and value, USBSID uses cycles for delay */
-      unsigned char USBSID_Read(unsigned char *writebuff);                  /* Write buffer, return result */
-      unsigned char USBSID_Read(unsigned char *writebuff, uint16_t cycles); /* Wait for n cycles and write buffer, return result */
+      void USBSID_Write(unsigned char *buff, size_t len);                    /* Write buffer of size_t len */
+      void USBSID_Write(uint8_t reg, uint8_t val);                           /* Write register and value */
+      void USBSID_Write(unsigned char *buff, size_t len, uint16_t cycles);   /* Wait n cycles, write buffer of size_t len */
+      void USBSID_Write(uint8_t reg, uint8_t val, uint16_t cycles);          /* Wait n cycles, write register and value */
+      void USBSID_WriteCycled(uint8_t reg, uint8_t val, uint16_t cycles);    /* Write register and value, USBSID uses cycles for delay */
+      unsigned char USBSID_Read(unsigned char *writebuff);                   /* Write buffer, return result */
+      unsigned char USBSID_Read(unsigned char *writebuff, uint16_t cycles);  /* Wait for n cycles and write buffer, return result */
 
       /* Asynchronous thread */
-      void USBSID_WriteRing(uint8_t reg, uint8_t val);
-      void USBSID_WriteRingCycled(uint8_t reg, uint8_t val, uint16_t cycles);
+      void USBSID_WriteRing(uint8_t reg, uint8_t val);                         /* Write register and value to ringbuffer, USBSID adds 10 delay cycles to each write */
+      void USBSID_WriteRingCycled(uint8_t reg, uint8_t val, uint16_t cycles);  /* Write register, value, and cycles to ringbuffer */
 
       /* Thread buffer */
-      void USBSID_SetFlush(void);
-      void USBSID_Flush(void);
+      void USBSID_SetFlush(void);  /* Set flush buffer flag to 1 */
+      void USBSID_Flush(void);     /* Set flush buffer flag to 1 and flushes the buffer */
 
-      /* Thread related */
+      /* Thread utils */
       void USBSID_RestartThread(bool with_cycles);
       static void *_USBSID_Thread(void *context)
       { /* Required for supplying private function to pthread_create */
         return ((USBSID_Class *)context)->USBSID_Thread();
       }
 
-      /* Bus related */
-      /* TODO: Migrate function to use a jumptable */
-      uint8_t USBSID_Address(uint16_t addr);
+      /* Timing and cycles */
+      uint_fast64_t USBSID_WaitForCycle(uint_fast16_t cycles);         /* Sleep for n cycles */
+      uint_fast64_t USBSID_CycleFromTimestamp(timestamp_t timestamp);  /* Returns cycles since m_StartTime */
 
-      /* Timing related */
-      typedef std::chrono::high_resolution_clock::time_point timestamp_t;
-      typedef std::chrono::nanoseconds  duration_t;
-      // typedef std::nano                 ratio_t;
-      timestamp_t m_StartTime   = std::chrono::high_resolution_clock::now();
-      timestamp_t m_NextTime    = std::chrono::high_resolution_clock::now();
-      timestamp_t m_CurrentTime = std::chrono::high_resolution_clock::now();
-      /* Cycle related */
-      // static double m_CPUcycleDuration               = ratio_t::den / cycles_per_sec;
-      // static double m_InvCPUcycleDurationNanoSeconds = 1.0 / (1000000000 / cycles_per_sec);
-      /* Cycle based functions */
-      uint_fast64_t USBSID_WaitForCycle(uint_fast16_t cycles);
-      uint_fast64_t USBSID_CycleFromTimestamp(timestamp_t timestamp);
+      /* Utils */
+      /* TODO: Migrate function to use a jumptable */
+      uint8_t USBSID_Address(uint16_t addr);  /* Calculates correct SID address to write to if player does not */
   };
 
 } /* USBSIDDriver */

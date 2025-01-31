@@ -166,14 +166,16 @@ void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles)
 {
   for (uint8_t i = 0; i < 4; i++) {
     if (clockSpeed[i] == clockrate_cycles) {
-      cycles_per_sec = clockrate_cycles;
+      cycles_per_sec = clockSpeed[i];
       cycles_per_frame = refreshRate[i];
-      m_CPUcycleDuration = ratio_t::den / cycles_per_sec;
-      m_InvCPUcycleDurationNanoSeconds = ratio_t::den / (1000000000 / cycles_per_sec);
-      USBDBG(stdout, "[USBSID] Set clockspeed to: [i]%d ~ [r]%ld\n", (int)clockSpeed[i], cycles_per_sec);
-      USBDBG(stdout, "[USBSID] m_CPUcycleDuration %f\n", m_CPUcycleDuration);
-      USBDBG(stdout, "[USBSID] m_InvCPUcycleDurationNanoSeconds %f\n", m_InvCPUcycleDurationNanoSeconds);
-      USBDBG(stdout, "[USBSID] cycles_per_frame %ld\n", cycles_per_frame);
+      cycles_per_raster = rasterRate[i];
+      us_CPUcycleDuration = ratio_t::den / (float)cycles_per_sec;
+      us_InvCPUcycleDurationNanoSeconds = 1.0 / (ratio_t::den / (float)cycles_per_sec);
+      USBDBG(stdout, "[USBSID] Clockspeed set to: %ld\n", cycles_per_sec);
+      USBDBG(stdout, "[USBSID] Cycles per raster %ld\n", cycles_per_raster);
+      USBDBG(stdout, "[USBSID] Cycles per frame: %ld\n", cycles_per_frame);
+      USBDBG(stdout, "[USBSID] CPU cycle duration in nanoseconds %f\n", us_CPUcycleDuration);
+      USBDBG(stdout, "[USBSID] Inverted CPU cycle duration in nanoseconds %.09f\n", us_InvCPUcycleDurationNanoSeconds);
       uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x50, i, 0, 0, 0};
       USBSID_SingleWrite(configbuff, 6);
       return;
@@ -183,14 +185,19 @@ void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles)
 
 long USBSID_Class::USBSID_GetClockRate(void)
 {
-  m_InvCPUcycleDurationNanoSeconds = 1.0 / (1000000000 / cycles_per_sec);
-  m_CPUcycleDuration = ratio_t::den / cycles_per_sec;
+  us_InvCPUcycleDurationNanoSeconds = 1.0 / (ratio_t::den / (float)cycles_per_sec);
+  us_CPUcycleDuration = ratio_t::den / (float)cycles_per_sec;
   return cycles_per_sec;
 }
 
 long USBSID_Class::USBSID_GetRefreshRate(void)
 {
   return cycles_per_frame;
+}
+
+long USBSID_Class::USBSID_GetRasterRate(void)
+{
+  return cycles_per_raster;
 }
 
 
@@ -648,39 +655,29 @@ void USBSID_Class::USBSID_DebugPrint(void)
 
 uint_fast64_t USBSID_Class::USBSID_CycleFromTimestamp(timestamp_t timestamp)
 {
-  m_InvCPUcycleDurationNanoSeconds = 1.0 / (1000000000 / cycles_per_sec);
+  USBSID_GetClockRate();  /* Make sure we use the right clockrate */
+  us_InvCPUcycleDurationNanoSeconds = 1.0 / (ratio_t::den / (float)cycles_per_sec);
   auto nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(timestamp - m_StartTime);
-  return (int64_t)(nsec.count() * m_InvCPUcycleDurationNanoSeconds);
+  return (int64_t)(nsec.count() * us_InvCPUcycleDurationNanoSeconds);
 }
 
 uint_fast64_t USBSID_Class::USBSID_WaitForCycle(uint_fast16_t cycles)
-{
+{ /* Returns the waited microseconds since last target time ~ not the actual cycles */
   USBSID_GetClockRate();  /* Make sure we use the right clockrate */
   timestamp_t now = std::chrono::high_resolution_clock::now();
-  /* double dur = cycles * m_InvCPUcycleDurationNanoSeconds; */
-  double dur = cycles * m_CPUcycleDuration;
+  double dur = cycles * us_CPUcycleDuration;  /* duration in nanoseconds */
   duration_t duration = (duration_t)(int_fast64_t)dur;
-  auto target_time = m_NextTime + duration;
+  auto target_time = m_LastTime + duration;  /* ns to wait since m_LastTime (now + duration for actual wait time) */
   auto target_delta = target_time - now;
-  /* auto wait_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(target_delta * 1000); */
   auto wait_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(target_delta);
-  auto wait_msec = std::chrono::duration_cast<std::chrono::milliseconds>(target_delta);
+  auto wait_usec = std::chrono::duration_cast<std::chrono::microseconds>(target_delta);
   if (wait_nsec.count() > 0) {
       std::this_thread::sleep_for(wait_nsec);
   }
-
-  while (now < target_time) {
-      now = std::chrono::high_resolution_clock::now();
-  }
-  m_CurrentTime       = now;
-  m_NextTime          = target_time;
-
-  /* ISSUE: returned cycles seem incorrect but does not affect playing */
-  int_fast64_t waited_cycles = (wait_nsec.count() * m_InvCPUcycleDurationNanoSeconds);
-  // int_fast64_t waited_cycles2 = (wait_msec.count() / m_CPUcycleDuration);
-  // printf("cycles_per_sec: %lu cycles: %lu waited_cycles: %lu wait_nsec: %ld wait_msec: %ld dur: %fu invdur: %f\n",
-  //   cycles_per_sec, cycles, waited_cycles, wait_nsec, wait_msec,
-  //   m_CPUcycleDuration, m_InvCPUcycleDurationNanoSeconds);
+  m_LastTime = target_time;
+  int_fast64_t waited_cycles = wait_usec.count();
+  /* USBDBG(stdout, "[C] %ld [WC] %ld [us] %ld [ns] %ld [ts] %lu\n",
+    cycles, waited_cycles, wait_usec.count(), wait_nsec.count(), USBSID_CycleFromTimestamp(now)); */
   return waited_cycles;
 }
 
@@ -778,8 +775,7 @@ void USBSID_Class::LIBUSB_InitOutBuffer(void)
   out_buffer = libusb_dev_mem_alloc(devh, len_out_buffer);
   if (out_buffer == NULL) {
     USBDBG(stdout, "[USBSID] libusb_dev_mem_alloc failed on out_buffer, allocating with malloc\r\n");
-    /* TODO: Maybe change to vector array? https://stackoverflow.com/a/24575552 */
-    out_buffer = (uint8_t*)malloc((sizeof(uint8_t)) * len_out_buffer);
+    out_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * len_out_buffer);
   } else {
     out_buffer_dma = true;
   }
@@ -790,10 +786,10 @@ void USBSID_Class::LIBUSB_InitOutBuffer(void)
   USBDBG(stdout, "[USBSID] libusb_fill_bulk_transfer transfer_out complete\r\n");
 
   if (thread_buffer == NULL) {
-    thread_buffer = (uint8_t*)malloc((sizeof(uint8_t)) * (len_out_buffer));
+    thread_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
   }
   if (write_buffer == NULL) {
-    write_buffer = (uint8_t*)malloc((sizeof(uint8_t)) * (len_out_buffer));
+    write_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
   }
 }
 
@@ -826,7 +822,7 @@ void USBSID_Class::LIBUSB_InitInBuffer(void)
   if (in_buffer == NULL) {
     USBDBG(stdout, "[USBSID] libusb_dev_mem_alloc failed on in_buffer, allocating with malloc\r\n");
     /* TODO: Maybe change to vector array? https://stackoverflow.com/a/24575552 */
-    in_buffer = (uint8_t*)malloc((sizeof(uint8_t)) * LEN_IN_BUFFER);
+    in_buffer = (uint8_t*)aligned_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * LEN_IN_BUFFER);
   } else {
     in_buffer_dma = true;
   }
@@ -837,7 +833,7 @@ void USBSID_Class::LIBUSB_InitInBuffer(void)
   USBDBG(stdout, "[USBSID] libusb_fill_bulk_transfer transfer_in complete\r\n");
 
   if (result == NULL) {
-    result = (uint8_t*)malloc((sizeof(uint8_t)) * (LEN_IN_BUFFER));
+    result = (uint8_t*)aligned_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * (LEN_IN_BUFFER));
   }
 }
 
@@ -883,11 +879,11 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
   threaded = start_threaded;
   withcycles = with_cycles;
   len_out_buffer = LEN_OUT_BUFFER;
-  write_buffer = (uint8_t*)malloc((sizeof(uint8_t)) * (len_out_buffer));
-  thread_buffer = (uint8_t*)malloc((sizeof(uint8_t)) * (len_out_buffer));
-  result = (uint8_t*)malloc((sizeof(uint8_t)) * (LEN_IN_BUFFER));
+  write_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
+  thread_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
+  result = (uint8_t*)aligned_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * (LEN_IN_BUFFER));
 #ifdef DEBUG_USBSID_MEMORY
-  temp_buffer = (uint8_t*)malloc((sizeof(uint8_t)) * (LEN_TMP_BUFFER));
+  temp_buffer = (uint8_t*)aligned_alloc(2 * LEN_TMP_BUFFER, (sizeof(uint8_t)) * (LEN_TMP_BUFFER));
 #endif
 
   /* Initialize libusb */

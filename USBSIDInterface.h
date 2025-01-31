@@ -43,6 +43,7 @@ extern "C" {
   void setclockrate_USBSID(USBSIDitf, long clockrate_cycles);
   long getclockrate_USBSID(USBSIDitf);
   long getrefreshrate_USBSID(USBSIDitf);
+  long getrasterrate_USBSID(USBSIDitf);
   /* TODO: Add all remaining namespace functions */
 
   /* Synchronous direct */
@@ -59,14 +60,14 @@ extern "C" {
   void writering_USBSID(USBSIDitf, uint16_t reg, uint8_t val);
   void writeringcycled_USBSID(USBSIDitf, uint16_t reg, uint8_t val, uint16_t cycles);
 
-  /* Thread Buffer */
+  /* Thread buffer */
   void setflush_USBSID(USBSIDitf);
   void flush_USBSID(USBSIDitf);
 
-  /* Thread related */
+  /* Thread utils */
   void restartthread_USBSID(USBSIDitf, bool with_cycles);
 
-  /* Timing */
+  /* Timing and cycles */
   int_fast64_t waitforcycle_USBSID(USBSIDitf, uint_fast64_t cycles);
 
 #ifdef __cplusplus
