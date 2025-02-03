@@ -26,6 +26,12 @@
 #ifndef _USBSID_H_
 #define _USBSID_H_
 
+#if defined(__linux__) || defined(__linux) || defined(linux) || defined(__unix__)
+  #define __US_LINUX_COMPILE
+#elif defined(_WIN32) || defined(_WIN64)
+  #define __US_WINDOWS_COMPILE
+#endif
+
 #ifdef USBSID_OPTOFF
 #pragma GCC push_options
 #pragma GCC optimize ("O0")
@@ -51,7 +57,7 @@
 #include <libusb.h>
 
 
-/* #define USBSID_DEBUG */
+#define USBSID_DEBUG
 #ifdef USBSID_DEBUG
   #define USBDBG(...) fprintf(__VA_ARGS__)
   #ifdef USBSID_MEMDEBUG
@@ -77,9 +83,9 @@ namespace USBSID_NS
     EP_IN_ADDR     = 0x82,
     LEN_IN_BUFFER  = 1,
     LEN_OUT_BUFFER = 64,
-#ifdef DEBUG_USBSID_MEMORY
+    #ifdef DEBUG_USBSID_MEMORY
     LEN_TMP_BUFFER = 4
-#endif
+    #endif
   };
 
   enum {
@@ -130,9 +136,9 @@ namespace USBSID_NS
   static uint8_t * __restrict__ out_buffer;    /* outgoing libusb will reside in this buffer */
   static uint8_t * __restrict__ thread_buffer; /* data to be transfered to the out_buffer will reside in this buffer */
   static uint8_t * __restrict__ write_buffer;  /* non async data will be written from this buffer */
-#ifdef DEBUG_USBSID_MEMORY
+  #ifdef DEBUG_USBSID_MEMORY
   static uint8_t * __restrict__ temp_buffer;   /* temp buffer for debug printing */
-#endif
+  #endif
   static uint8_t * __restrict__ result;        /* variable where read data is copied into */
   static int len_out_buffer;      /* changable variable for out buffer size */
   static int buffer_pos = 1;      /* current position of the out buffer */
@@ -249,9 +255,9 @@ namespace USBSID_NS
       ~USBSID_Class();  /* Deconstructor */
 
       bool us_Initialised;
-#ifdef DEBUG_USBSID_MEMORY
+      #ifdef DEBUG_USBSID_MEMORY
       bool us_DebugMemory = false;
-#endif
+      #endif
 
       /* USBSID */
       int USBSID_Init(bool start_threaded, bool with_cycles);

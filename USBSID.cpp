@@ -34,6 +34,27 @@
 using namespace USBSID_NS;
 using namespace std;
 
+static inline uint8_t* us_alloc(size_t alignment, size_t size)
+{
+#if defined(__US_LINUX_COMPILE)
+  return (uint8_t*)aligned_alloc(alignment, size);
+#elif defined(__US_WINDOWS_COMPILE)
+  return (uint8_t*)_aligned_malloc(size, alignment);
+#else
+  (void)alignment;
+  return (uint8_t*)malloc(size);
+#endif
+}
+
+static inline void us_free(void* m)
+{
+#ifdef __US_WINDOWS_COMPILE
+  return _aligned_free(m);
+#else
+  return free(m);
+#endif
+}
+
 extern "C" {
 
 /* USBSID */
@@ -58,14 +79,14 @@ USBSID_Class::~USBSID_Class()
 {
   USBDBG(stdout, "[USBSID] Driver de-init start\n");
   if (USBSID_Close() == 0) us_Initialised = false;
-  if (write_buffer) free(write_buffer);
-  if (thread_buffer) free(thread_buffer);
-  if (result) free(result);
+  if (write_buffer) us_free(write_buffer);
+  if (thread_buffer) us_free(thread_buffer);
+  if (result) us_free(result);
   thread_buffer = NULL;
   write_buffer = NULL;
   result = NULL;
 #ifdef DEBUG_USBSID_MEMORY
-  if (temp_buffer) free(temp_buffer);
+  if (temp_buffer) us_free(temp_buffer);
 #endif
 #ifdef DEBUG_USBSID_MEMORY
   temp_buffer = NULL;
@@ -775,7 +796,8 @@ void USBSID_Class::LIBUSB_InitOutBuffer(void)
   out_buffer = libusb_dev_mem_alloc(devh, len_out_buffer);
   if (out_buffer == NULL) {
     USBDBG(stdout, "[USBSID] libusb_dev_mem_alloc failed on out_buffer, allocating with malloc\r\n");
-    out_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * len_out_buffer);
+    // out_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * len_out_buffer);
+    out_buffer = us_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * len_out_buffer);
   } else {
     out_buffer_dma = true;
   }
@@ -786,10 +808,12 @@ void USBSID_Class::LIBUSB_InitOutBuffer(void)
   USBDBG(stdout, "[USBSID] libusb_fill_bulk_transfer transfer_out complete\r\n");
 
   if (thread_buffer == NULL) {
-    thread_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
+    // thread_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
+    thread_buffer = us_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
   }
   if (write_buffer == NULL) {
-    write_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
+    // write_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
+    write_buffer = us_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
   }
 }
 
@@ -802,15 +826,15 @@ void USBSID_Class::LIBUSB_FreeOutBuffer(void)
       USBERR(stderr, "[USBSID] Error, failed to free out_buffer DMA memory: %d, %s: %s\n", rc, libusb_error_name(rc), libusb_strerror(rc));
     }
   } else {
-    if (out_buffer) free(out_buffer);
+    if (out_buffer) us_free(out_buffer);
     out_buffer = NULL;
   }
   if (thread_buffer) {
-    free(thread_buffer);
+    us_free(thread_buffer);
     thread_buffer = NULL;
   }
   if (write_buffer) {
-    free(write_buffer);
+    us_free(write_buffer);
     write_buffer = NULL;
   }
 }
@@ -822,7 +846,8 @@ void USBSID_Class::LIBUSB_InitInBuffer(void)
   if (in_buffer == NULL) {
     USBDBG(stdout, "[USBSID] libusb_dev_mem_alloc failed on in_buffer, allocating with malloc\r\n");
     /* TODO: Maybe change to vector array? https://stackoverflow.com/a/24575552 */
-    in_buffer = (uint8_t*)aligned_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * LEN_IN_BUFFER);
+    // in_buffer = (uint8_t*)aligned_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * LEN_IN_BUFFER);
+    in_buffer = us_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * LEN_IN_BUFFER);
   } else {
     in_buffer_dma = true;
   }
@@ -833,7 +858,8 @@ void USBSID_Class::LIBUSB_InitInBuffer(void)
   USBDBG(stdout, "[USBSID] libusb_fill_bulk_transfer transfer_in complete\r\n");
 
   if (result == NULL) {
-    result = (uint8_t*)aligned_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * (LEN_IN_BUFFER));
+    // result = (uint8_t*)aligned_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * (LEN_IN_BUFFER));
+    result = us_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * (LEN_IN_BUFFER));
   }
 }
 
@@ -846,11 +872,11 @@ void USBSID_Class::LIBUSB_FreeInBuffer(void)
       USBERR(stderr, "[USBSID] Error, failed to free in_buffer DMA memory: %d, %s: %s\n", rc, libusb_error_name(rc), libusb_strerror(rc));
     }
   } else {
-    if (in_buffer) free(in_buffer);
+    if (in_buffer) us_free(in_buffer);
     in_buffer = NULL;
   }
   if (result) {
-    free(result);
+    us_free(result);
     result = NULL;
   }
 }
@@ -879,11 +905,15 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
   threaded = start_threaded;
   withcycles = with_cycles;
   len_out_buffer = LEN_OUT_BUFFER;
-  write_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
-  thread_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
-  result = (uint8_t*)aligned_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * (LEN_IN_BUFFER));
+  // write_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
+  // thread_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
+  // result = (uint8_t*)aligned_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * (LEN_IN_BUFFER));
+  write_buffer = us_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
+  thread_buffer = us_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
+  result = us_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * (LEN_IN_BUFFER));
 #ifdef DEBUG_USBSID_MEMORY
-  temp_buffer = (uint8_t*)aligned_alloc(2 * LEN_TMP_BUFFER, (sizeof(uint8_t)) * (LEN_TMP_BUFFER));
+  // temp_buffer = (uint8_t*)aligned_alloc(2 * LEN_TMP_BUFFER, (sizeof(uint8_t)) * (LEN_TMP_BUFFER));
+  temp_buffer = us_alloc(2 * LEN_TMP_BUFFER, (sizeof(uint8_t)) * (LEN_TMP_BUFFER));
 #endif
 
   /* Initialize libusb */
@@ -928,12 +958,14 @@ out:
 int USBSID_Class::LIBUSB_Exit(void)
 {
 
-  LIBUSB_StopThread();
-  USBSID_Reset();
-  LIBUSB_StopTransfers();
-  LIBUSB_FreeInBuffer();
-  LIBUSB_FreeOutBuffer();
-  LIBUSB_CloseDevice();
+  if (rc >= 0) {
+    LIBUSB_StopThread();
+    USBSID_Reset();
+    LIBUSB_StopTransfers();
+    LIBUSB_FreeInBuffer();
+    LIBUSB_FreeOutBuffer();
+    LIBUSB_CloseDevice();
+  }
   if (ctx) {
     libusb_exit(ctx);
   }
