@@ -40,6 +40,7 @@
 #pragma GCC diagnostic ignored "-Wunused-variable"
 
 #ifdef __cplusplus
+  #include <cstdbool>
   #include <cstdint>
   #include <cstdio>
   #include <cstdlib>
@@ -47,6 +48,7 @@
   #include <chrono>
   #include <thread>
 #else
+  #include <stdbool.h>
   #include <stdint.h>
   #include <stdio.h>
   #include <stdlib.h>
@@ -67,6 +69,8 @@
   #define USBDBG(...) ((void)0)
 #endif
 #define USBERR(...) fprintf(__VA_ARGS__)
+
+using namespace std;
 
 namespace USBSID_NS
 {
