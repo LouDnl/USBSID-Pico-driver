@@ -59,7 +59,7 @@
 #include <libusb.h>
 
 
-#define USBSID_DEBUG
+/* #define USBSID_DEBUG */
 #ifdef USBSID_DEBUG
   #define USBDBG(...) fprintf(__VA_ARGS__)
   #ifdef USBSID_MEMDEBUG
