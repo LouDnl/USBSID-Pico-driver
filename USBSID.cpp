@@ -186,7 +186,7 @@ void USBSID_Class::USBSID_ClearBus(void)
   return;
 }
 
-void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles)
+void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles, bool suspend_sids)
 {
   for (uint8_t i = 0; i < 4; i++) {
     if (clockSpeed[i] == clockrate_cycles) {
@@ -201,7 +201,7 @@ void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles)
       USBDBG(stdout, "[USBSID] CPU cycle duration in nanoseconds %f\n", us_CPUcycleDuration);
       USBDBG(stdout, "[USBSID] Inverted CPU cycle duration in nanoseconds %.09f\n", us_InvCPUcycleDurationNanoSeconds);
       if (clk_retrieved == 0 || us_clkrate != cycles_per_sec) {
-        uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x50, i, 0, 0, 0};
+        uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x50, i, (uint8_t)(suspend_sids == true ? 1 : 0), 0, 0};
         USBSID_SingleWrite(configbuff, 6);
       }
       return;

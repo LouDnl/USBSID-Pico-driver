@@ -41,7 +41,7 @@ extern "C" {
   void clearbus_USBSID(USBSIDitf);
   void mute_USBSID(USBSIDitf);
   void unmute_USBSID(USBSIDitf);
-  void setclockrate_USBSID(USBSIDitf, long clockrate_cycles);
+  void setclockrate_USBSID(USBSIDitf, long clockrate_cycles, bool suspend_sids);
   long getclockrate_USBSID(USBSIDitf);
   long getrefreshrate_USBSID(USBSIDitf);
   long getrasterrate_USBSID(USBSIDitf);

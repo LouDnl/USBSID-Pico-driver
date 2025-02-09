@@ -65,9 +65,9 @@ extern "C"
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_UnMute();
   };
-  void setclockrate_USBSID(USBSIDitf p, long clockrate_cycles){
+  void setclockrate_USBSID(USBSIDitf p, long clockrate_cycles, bool suspend_sids){
     if( p == NULL ) return;
-    return ((USBSID_Class*)p)->USBSID_SetClockRate(clockrate_cycles);
+    return ((USBSID_Class*)p)->USBSID_SetClockRate(clockrate_cycles, suspend_sids);
   };
   long getclockrate_USBSID(USBSIDitf p){
     if( p == NULL ) return 0;
