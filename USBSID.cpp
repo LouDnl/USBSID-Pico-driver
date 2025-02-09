@@ -62,15 +62,15 @@ extern "C" {
 USBSID_Class::USBSID_Class() :
   us_Initialised(false)
 {
-#ifdef DEBUG_USBSID_MEMORY
+  #ifdef DEBUG_USBSID_MEMORY
   us_DebugMemory = true;
-#endif
+  #endif
   USBDBG(stdout, "[USBSID] Driver init start\n");
 
-#ifdef DEBUG_USBSID_MEMORY
+  #ifdef DEBUG_USBSID_MEMORY
   memset(sid_memory, 0, (sizeof(sid_memory) / sizeof(sid_memory[0])));
   memset(sid_memory_changed, 0, (sizeof(sid_memory_changed) / sizeof(sid_memory_changed[0])));
-#endif
+  #endif
 
   us_Initialised = true;
 }
@@ -85,12 +85,12 @@ USBSID_Class::~USBSID_Class()
   thread_buffer = NULL;
   write_buffer = NULL;
   result = NULL;
-#ifdef DEBUG_USBSID_MEMORY
+  #ifdef DEBUG_USBSID_MEMORY
   if (temp_buffer) us_free(temp_buffer);
-#endif
-#ifdef DEBUG_USBSID_MEMORY
+  #endif
+  #ifdef DEBUG_USBSID_MEMORY
   temp_buffer = NULL;
-#endif
+  #endif
 }
 
 int USBSID_Class::USBSID_Init(bool start_threaded, bool with_cycles)
@@ -102,12 +102,7 @@ int USBSID_Class::USBSID_Init(bool start_threaded, bool with_cycles)
   if (rc >= 0) {
     /* Start thread on init */
     if (threaded) {
-      /* Init ringbuffer */
-      run_thread = 1;
-      buffer_pos = 1;
-      ringbuffer.ring_read = 0;
-      ringbuffer.ring_write = 0;
-      pthread_create(&this->ptid, NULL, &this->_USBSID_Thread, NULL);
+      rc = USBSID_InitThread();
     }
     return rc;
   } else {
@@ -132,6 +127,7 @@ void USBSID_Class::USBSID_Pause(void)
   USBDBG(stdout, "[USBSID] Pause\r\n");
   unsigned char buff[3] = {(COMMAND << 6 | PAUSE), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
+  return;
 }
 
 void USBSID_Class::USBSID_Reset(void)
@@ -139,6 +135,7 @@ void USBSID_Class::USBSID_Reset(void)
   USBDBG(stdout, "[USBSID] Reset\r\n");
   unsigned char buff[3] = {(COMMAND << 6 | RESET_SID), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
+  return;
 }
 
 void USBSID_Class::USBSID_ResetAllRegisters(void)
@@ -146,6 +143,7 @@ void USBSID_Class::USBSID_ResetAllRegisters(void)
   USBDBG(stdout, "[USBSID] Reset All Registers\r\n");
   unsigned char buff[3] = {(COMMAND << 6 | RESET_SID), 0x1, 0x0};
   USBSID_SingleWrite(buff, 3);
+  return;
 }
 
 void USBSID_Class::USBSID_Mute(void)
@@ -153,6 +151,7 @@ void USBSID_Class::USBSID_Mute(void)
   USBDBG(stdout, "[USBSID] Mute\r\n");
   unsigned char buff[3] = {(COMMAND << 6 | MUTE), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
+  return;
 }
 
 void USBSID_Class::USBSID_UnMute(void)
@@ -160,6 +159,7 @@ void USBSID_Class::USBSID_UnMute(void)
   USBDBG(stdout, "[USBSID] UnMute\r\n");
   unsigned char buff[3] = {(COMMAND << 6 | UNMUTE), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
+  return;
 }
 
 void USBSID_Class::USBSID_DisableSID(void)
@@ -167,6 +167,7 @@ void USBSID_Class::USBSID_DisableSID(void)
   USBDBG(stdout, "[USBSID] DisableSID\r\n");
   unsigned char buff[3] = {(COMMAND << 6 | DISABLE_SID), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
+  return;
 }
 
 void USBSID_Class::USBSID_EnableSID(void)
@@ -174,6 +175,7 @@ void USBSID_Class::USBSID_EnableSID(void)
   USBDBG(stdout, "[USBSID] EnableSID\r\n");
   unsigned char buff[3] = {(COMMAND << 6 | ENABLE_SID), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
+  return;
 }
 
 void USBSID_Class::USBSID_ClearBus(void)
@@ -181,6 +183,7 @@ void USBSID_Class::USBSID_ClearBus(void)
   USBDBG(stdout, "[USBSID] ClearBus\r\n");
   unsigned char buff[3] = {(COMMAND << 6 | CLEAR_BUS), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
+  return;
 }
 
 void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles)
@@ -197,18 +200,33 @@ void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles)
       USBDBG(stdout, "[USBSID] Cycles per frame: %ld\n", cycles_per_frame);
       USBDBG(stdout, "[USBSID] CPU cycle duration in nanoseconds %f\n", us_CPUcycleDuration);
       USBDBG(stdout, "[USBSID] Inverted CPU cycle duration in nanoseconds %.09f\n", us_InvCPUcycleDurationNanoSeconds);
-      uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x50, i, 0, 0, 0};
-      USBSID_SingleWrite(configbuff, 6);
+      if (clk_retrieved == 0 || us_clkrate != cycles_per_sec) {
+        uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x50, i, 0, 0, 0};
+        USBSID_SingleWrite(configbuff, 6);
+      }
       return;
     }
   }
+  return;
 }
 
 long USBSID_Class::USBSID_GetClockRate(void)
 {
-  us_InvCPUcycleDurationNanoSeconds = 1.0 / (ratio_t::den / (float)cycles_per_sec);
-  us_CPUcycleDuration = ratio_t::den / (float)cycles_per_sec;
-  return cycles_per_sec;
+  if (clk_retrieved == 1) {
+    us_InvCPUcycleDurationNanoSeconds = 1.0 / (ratio_t::den / (float)cycles_per_sec);
+    us_CPUcycleDuration = ratio_t::den / (float)cycles_per_sec;
+    return cycles_per_sec;
+  } else if (clk_retrieved == 0) {
+    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x57, 0, 0, 0, 0};
+    USBSID_SingleWrite(configbuff, 6);
+    us_clkrate = clockSpeed[USBSID_SingleReadConfig(result, 1)];
+    cycles_per_sec = us_clkrate;
+    clk_retrieved = 1;
+    us_InvCPUcycleDurationNanoSeconds = 1.0 / (ratio_t::den / (float)cycles_per_sec);
+    us_CPUcycleDuration = ratio_t::den / (float)cycles_per_sec;
+    return cycles_per_sec;
+  }
+  return -1;
 }
 
 long USBSID_Class::USBSID_GetRefreshRate(void)
@@ -230,6 +248,7 @@ void USBSID_Class::USBSID_SingleWrite(unsigned char *buff, size_t len)
   if (libusb_bulk_transfer(devh, EP_OUT_ADDR, buff, len, &actual_length, 0) < 0) {
     USBERR(stderr, "[USBSID] Error while sending synchronous write buffer of length %d\n", actual_length);
   }
+  return;
 }
 
 unsigned char USBSID_Class::USBSID_SingleRead(uint8_t reg)
@@ -250,6 +269,19 @@ unsigned char USBSID_Class::USBSID_SingleRead(uint8_t reg)
   return result[0];
 }
 
+unsigned char USBSID_Class::USBSID_SingleReadConfig(unsigned char *buff, size_t len)
+{
+  int actual_length;
+  rc = libusb_bulk_transfer(devh, EP_IN_ADDR, buff, len, &actual_length, 0);
+  if (rc == LIBUSB_ERROR_TIMEOUT) {
+    USBERR(stderr, "[USBSID] Timeout error while reading (%d)\n", actual_length);
+    return 0;
+  } else if (rc < 0) {
+    USBERR(stderr, "[USBSID] Error while waiting for char while reading\n");
+    return 0;
+  }
+  return *buff;
+}
 
 /* ASYNCHRONOUS */
 
@@ -263,6 +295,7 @@ void USBSID_Class::USBSID_Write(unsigned char *buff, size_t len)
   memcpy(out_buffer, buff, len);
   libusb_submit_transfer(transfer_out);
   libusb_handle_events_completed(ctx, NULL);
+  return;
 }
 
 void USBSID_Class::USBSID_Write(uint8_t reg, uint8_t val)
@@ -276,6 +309,7 @@ void USBSID_Class::USBSID_Write(uint8_t reg, uint8_t val)
   write_buffer[1] = (reg & 0xFF);
   write_buffer[2] = val;
   USBSID_Write(write_buffer, 3);
+  return;
 }
 
 void USBSID_Class::USBSID_Write(unsigned char *buff, size_t len, uint16_t cycles)
@@ -289,6 +323,7 @@ void USBSID_Class::USBSID_Write(unsigned char *buff, size_t len, uint16_t cycles
   memcpy(out_buffer, buff, len);
   libusb_submit_transfer(transfer_out);
   libusb_handle_events_completed(ctx, NULL);
+  return;
 }
 
 void USBSID_Class::USBSID_Write(uint8_t reg, uint8_t val, uint16_t cycles)
@@ -303,6 +338,7 @@ void USBSID_Class::USBSID_Write(uint8_t reg, uint8_t val, uint16_t cycles)
   write_buffer[1] = (reg & 0xFF);
   write_buffer[2] = val;
   USBSID_Write(write_buffer, 3);
+  return;
 }
 
 void USBSID_Class::USBSID_WriteCycled(uint8_t reg, uint8_t val, uint16_t cycles)
@@ -318,6 +354,7 @@ void USBSID_Class::USBSID_WriteCycled(uint8_t reg, uint8_t val, uint16_t cycles)
   write_buffer[3] = (cycles >> 8);
   write_buffer[4] = (cycles & 0xFF);
   USBSID_Write(write_buffer, 5);
+  return;
 }
 
 unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff)
@@ -358,11 +395,13 @@ void USBSID_Class::USBSID_Flush(void)
 {
   USBSID_SetFlush();
   USBSID_FlushBuffer();
+  return;
 }
 
 void USBSID_Class::USBSID_SetFlush(void)
 {
   flush_buffer = 1;
+  return;
 }
 
 void USBSID_Class::USBSID_FlushBuffer(void)
@@ -384,11 +423,12 @@ void USBSID_Class::USBSID_FlushBuffer(void)
   } else {
     flush_buffer = 0;
   }
+  return;
 }
 
 void* USBSID_Class::USBSID_Thread(void)
 { /* Only starts when threaded == true */
-  USBDBG(stdout, "[USBSID] Thread started\r\n");
+  USBDBG(stdout, "[USBSID] Thread starting\r\n");
   #ifdef _GNU_SOURCE
   pthread_setname_np(pthread_self(), "USBSID Thread");
   #endif
@@ -397,7 +437,8 @@ void* USBSID_Class::USBSID_Thread(void)
   if (withcycles) {
     USBDBG(stdout, "[USBSID] Thread with cycles\r\n");
   }
-  while(run_thread) {
+  pthread_mutex_lock(&us_mutex);
+  while(run_thread == 1) {
     if (flush_buffer == 1) {
       USBSID_FlushBuffer();
     }
@@ -412,15 +453,44 @@ void* USBSID_Class::USBSID_Thread(void)
     }
   }
   USBDBG(stdout, "[USBSID] Thread finished\r\n");
+  us_thread--;
+  pthread_mutex_unlock(&us_mutex);
   pthread_exit(NULL);
-
   return NULL;
+}
+
+int USBSID_Class::USBSID_InitThread(void)
+{
+  USBDBG(stdout, "[USBSID] Init Thread start\r\n");
+  /* Init ringbuffer */
+  flush_buffer = 0;
+  run_thread = buffer_pos = 1;
+  ringbuffer.ring_read = ringbuffer.ring_write = 0;
+  pthread_mutex_lock(&us_mutex);
+  us_thread++;
+  pthread_mutex_unlock(&us_mutex);
+  int error;
+  error = pthread_create(&this->us_ptid, NULL, &this->_USBSID_Thread, NULL);
+  if (error != 0) {
+    USBERR(stderr, "[USBSID] Thread can't be created :[%s]\n", strerror(error));
+  }
+  return rc;
 }
 
 void USBSID_Class::USBSID_StopThread(void)
 {
-  ringbuffer.ring_read = 0, ringbuffer.ring_write = 0;
-  run_thread = 0;
+  USBDBG(stdout, "[USBSID] Stop thread\r\n");
+  if (USBSID_IsRunning() == 1) {
+    USBDBG(stdout, "[USBSID] Set thread exit = 1\r\n");
+    run_thread = flush_buffer = 0;
+    ringbuffer.ring_read = 0, ringbuffer.ring_write = 0;
+    pthread_join(us_ptid, NULL);
+    USBDBG(stdout, "[USBSID] Thread attached\r\n");
+    threaded = withcycles = false;
+    while (us_thread > 0) {};
+    pthread_mutex_destroy(&us_mutex);
+  }
+  return;
 }
 
 int USBSID_Class::USBSID_IsRunning(void)
@@ -430,24 +500,24 @@ int USBSID_Class::USBSID_IsRunning(void)
 
 void USBSID_Class::USBSID_RestartThread(bool with_cycles)
 {
-  if (USBSID_IsRunning()) {
-    /* Stop any active transfers */
-    threaded = withcycles = false;
-    ringbuffer.ring_read = ringbuffer.ring_write = 0;
-    LIBUSB_StopTransfers();
-    /* First check if not already running */
-    LIBUSB_StopThread();
-  }
+  USBDBG(stdout, "[USBSID] Restart thread (%d)\r\n", USBSID_IsRunning());
+  /* First check if not already running */
+  USBSID_StopThread();
+  /* Stop any active transfers */
+  LIBUSB_StopTransfers();
+  /* Free all buffers */
   LIBUSB_FreeOutBuffer();
+  LIBUSB_FreeInBuffer();
+  /* Re-init variabels */
   threaded = true;
   withcycles = with_cycles;
   len_out_buffer = LEN_OUT_BUFFER;
+  /* Init all buffers */
   LIBUSB_InitOutBuffer();
-  run_thread = 1;
-  flush_buffer = 0;
-  buffer_pos = 1;
-  ringbuffer.ring_read = ringbuffer.ring_write = 0;
-  pthread_create(&this->ptid, NULL, &this->_USBSID_Thread, NULL);
+  LIBUSB_InitInBuffer();
+  /* Init thread */
+  USBSID_InitThread();
+  return;
 }
 
 
@@ -461,6 +531,7 @@ void USBSID_Class::USBSID_WriteRing(uint8_t reg, uint8_t val)
   } else {
     USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded = %d and withcycles = %d\n", __func__, threaded, withcycles);
   }
+  return;
 }
 
 void USBSID_Class::USBSID_WriteRingCycled(uint8_t reg, uint8_t val, uint16_t cycles)
@@ -473,6 +544,7 @@ void USBSID_Class::USBSID_WriteRingCycled(uint8_t reg, uint8_t val, uint16_t cyc
   } else {
     USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded = %d and withcycles = %d\n", __func__, threaded, withcycles);
   }
+  return;
 }
 
 void USBSID_Class::USBSID_RingPopCycled(void)
@@ -499,8 +571,8 @@ void USBSID_Class::USBSID_RingPopCycled(void)
     libusb_handle_events_completed(ctx, NULL);
     memset(thread_buffer, 0, 64);
     memset(out_buffer, 0, len_out_buffer);
-    return;
   }
+  return;
 }
 
 void USBSID_Class::USBSID_RingPop(void)
@@ -523,6 +595,7 @@ void USBSID_Class::USBSID_RingPop(void)
     memset(thread_buffer, 0, 64);
     memset(out_buffer, 0, len_out_buffer);
   }
+  return;
 }
 
 uint8_t * USBSID_Class::USBSID_RingPop(bool return_busvalue)
@@ -587,7 +660,7 @@ uint8_t USBSID_Class::USBSID_Address(uint16_t addr)
 
 void USBSID_Class::USBSID_FlushMemory(void)
 { /* Unused at the moment */
-#ifdef DEBUG_USBSID_MEMORY
+  #ifdef DEBUG_USBSID_MEMORY
   int pos = 1;
   out_buffer[0] = 0xFF; /* ID This as fast writes */
   for (uint8_t i = 1; i < 64; i++) {
@@ -611,12 +684,13 @@ void USBSID_Class::USBSID_FlushMemory(void)
   memset(sid_memory, 0, (sizeof(sid_memory) / sizeof(sid_memory[0])));
   memset(sid_memory_changed, 0, (sizeof(sid_memory_changed) / sizeof(sid_memory_changed[0])));
   memset(sid_memory_cycles, 0, (sizeof(sid_memory_cycles) / sizeof(sid_memory_cycles[0])));
-#endif
+  #endif
+  return;
 }
 
 void USBSID_Class::USBSID_FillMemory(void)
 { /* Unused at the moment */
-#ifdef DEBUG_USBSID_MEMORY
+  #ifdef DEBUG_USBSID_MEMORY
   ringbuffer.ringpop = ringbuffer.ring_buffer[ringbuffer.ring_read++];
   uint8_t reg = (uint8_t)(ringbuffer.ringpop >> 8);
   uint8_t val = (uint8_t)(ringbuffer.ringpop & 0xFF);
@@ -634,12 +708,13 @@ void USBSID_Class::USBSID_FillMemory(void)
     sid_memory_changed[reg]++;
     sid_memory_cycles[reg] = cycles;
   }
-#endif
+  #endif
+  return;
 }
 
 void USBSID_Class::USBSID_DebugPrint(void)
 { /* Unused at the moment */
-#ifdef DEBUG_USBSID_MEMORY
+  #ifdef DEBUG_USBSID_MEMORY
   printf("[SID1]\
   [V1]$%02x$%02x$%02x$%02x$%02x$%02x$%02x\
   [V2]$%02x$%02x$%02x$%02x$%02x$%02x$%02x\
@@ -668,7 +743,8 @@ void USBSID_Class::USBSID_DebugPrint(void)
     sid_memory[0x19],sid_memory[0x1A],
     sid_memory[0x1B],sid_memory[0x1C]
   );
-#endif
+  #endif
+  return;
 }
 
 
@@ -679,7 +755,7 @@ uint_fast64_t USBSID_Class::USBSID_CycleFromTimestamp(timestamp_t timestamp)
   USBSID_GetClockRate();  /* Make sure we use the right clockrate */
   us_InvCPUcycleDurationNanoSeconds = 1.0 / (ratio_t::den / (float)cycles_per_sec);
   auto nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(timestamp - m_StartTime);
-  return (int64_t)(nsec.count() * us_InvCPUcycleDurationNanoSeconds);
+  return (int_fast64_t)(nsec.count() * us_InvCPUcycleDurationNanoSeconds);
 }
 
 uint_fast64_t USBSID_Class::USBSID_WaitForCycle(uint_fast16_t cycles)
@@ -689,34 +765,24 @@ uint_fast64_t USBSID_Class::USBSID_WaitForCycle(uint_fast16_t cycles)
   double dur = cycles * us_CPUcycleDuration;  /* duration in nanoseconds */
   duration_t duration = (duration_t)(int_fast64_t)dur;
   auto target_time = m_LastTime + duration;  /* ns to wait since m_LastTime (now + duration for actual wait time) */
+  // auto target_time = now + duration;  /* ns to wait since m_LastTime (now + duration for actual wait time) */
   auto target_delta = target_time - now;
   auto wait_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(target_delta);
-  auto wait_usec = std::chrono::duration_cast<std::chrono::microseconds>(target_delta);
+  // auto wait_usec = std::chrono::duration_cast<std::chrono::microseconds>(target_delta);
   if (wait_nsec.count() > 0) {
       std::this_thread::sleep_for(wait_nsec);
   }
   m_LastTime = target_time;
-  int_fast64_t waited_cycles = wait_usec.count();
-  /* USBDBG(stdout, "[C] %ld [WC] %ld [us] %ld [ns] %ld [ts] %lu\n",
-    cycles, waited_cycles, wait_usec.count(), wait_nsec.count(), USBSID_CycleFromTimestamp(now)); */
+  /* int_fast64_t waited_cycles = wait_usec.count(); */
+  int_fast64_t waited_cycles = (wait_nsec.count() * us_InvCPUcycleDurationNanoSeconds);
+  // USBDBG(stdout, "[C] %ld [WC] %ld [us] %ld [ns] %ld [ts] %lu\n",
+  //   cycles, waited_cycles, wait_usec.count(), wait_nsec.count(), USBSID_CycleFromTimestamp(now));
+  // return (wait_nsec.count() > 0) ? waited_cycles : 0;
   return waited_cycles;
 }
 
 
 /* LIBUSB */
-
-void USBSID_Class::LIBUSB_StopThread(void)
-{
-  USBDBG(stdout, "[USBSID] Stop thread\r\n");
-  if (USBSID_IsRunning()) {
-    USBSID_StopThread();
-    USBDBG(stdout, "[USBSID] Set thread exit = 1\r\n");
-    pthread_join(ptid, NULL);
-    USBDBG(stdout, "[USBSID] Thread attached\r\n");
-    threaded = false;
-    withcycles = false;
-  }
-}
 
 int USBSID_Class::LIBUSB_OpenDevice(void)
 {
@@ -743,6 +809,7 @@ void USBSID_Class::LIBUSB_CloseDevice(void)
     }
     libusb_close(devh);
   }
+  return;
 }
 
 int USBSID_Class::LIBUSB_DetachKernelDriver(void)
@@ -815,6 +882,7 @@ void USBSID_Class::LIBUSB_InitOutBuffer(void)
     // write_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
     write_buffer = us_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
   }
+  return;
 }
 
 void USBSID_Class::LIBUSB_FreeOutBuffer(void)
@@ -837,6 +905,7 @@ void USBSID_Class::LIBUSB_FreeOutBuffer(void)
     us_free(write_buffer);
     write_buffer = NULL;
   }
+  return;
 }
 
 void USBSID_Class::LIBUSB_InitInBuffer(void)
@@ -845,8 +914,6 @@ void USBSID_Class::LIBUSB_InitInBuffer(void)
   in_buffer = libusb_dev_mem_alloc(devh, LEN_IN_BUFFER);
   if (in_buffer == NULL) {
     USBDBG(stdout, "[USBSID] libusb_dev_mem_alloc failed on in_buffer, allocating with malloc\r\n");
-    /* TODO: Maybe change to vector array? https://stackoverflow.com/a/24575552 */
-    // in_buffer = (uint8_t*)aligned_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * LEN_IN_BUFFER);
     in_buffer = us_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * LEN_IN_BUFFER);
   } else {
     in_buffer_dma = true;
@@ -858,9 +925,9 @@ void USBSID_Class::LIBUSB_InitInBuffer(void)
   USBDBG(stdout, "[USBSID] libusb_fill_bulk_transfer transfer_in complete\r\n");
 
   if (result == NULL) {
-    // result = (uint8_t*)aligned_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * (LEN_IN_BUFFER));
     result = us_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * (LEN_IN_BUFFER));
   }
+  return;
 }
 
 void USBSID_Class::LIBUSB_FreeInBuffer(void)
@@ -879,6 +946,7 @@ void USBSID_Class::LIBUSB_FreeInBuffer(void)
     us_free(result);
     result = NULL;
   }
+  return;
 }
 
 void USBSID_Class::LIBUSB_StopTransfers(void)
@@ -886,6 +954,7 @@ void USBSID_Class::LIBUSB_StopTransfers(void)
   USBDBG(stdout, "[USBSID] Stopping transfers\r\n");
   if (transfer_out != NULL) {
     rc = libusb_cancel_transfer(transfer_out);
+    libusb_free_transfer(transfer_out);
     if (rc < 0 && rc != -5) {
       USBERR(stderr, "[USBSID] Error, failed to cancel transfer %d - %s: %s\n", rc, libusb_error_name(rc), libusb_strerror(rc));
     }
@@ -893,10 +962,12 @@ void USBSID_Class::LIBUSB_StopTransfers(void)
 
   if (transfer_in != NULL) {
     rc = libusb_cancel_transfer(transfer_in);
+    libusb_free_transfer(transfer_in);
     if (rc < 0 && rc != -5) {
       USBERR(stderr, "[USBSID] Error, failed to cancel transfer %d - %s: %s\n", rc, libusb_error_name(rc), libusb_strerror(rc));
     }
   }
+  return;
 }
 
 int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
@@ -905,16 +976,12 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
   threaded = start_threaded;
   withcycles = with_cycles;
   len_out_buffer = LEN_OUT_BUFFER;
-  // write_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
-  // thread_buffer = (uint8_t*)aligned_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
-  // result = (uint8_t*)aligned_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * (LEN_IN_BUFFER));
   write_buffer = us_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
   thread_buffer = us_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
   result = us_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * (LEN_IN_BUFFER));
-#ifdef DEBUG_USBSID_MEMORY
-  // temp_buffer = (uint8_t*)aligned_alloc(2 * LEN_TMP_BUFFER, (sizeof(uint8_t)) * (LEN_TMP_BUFFER));
+  #ifdef DEBUG_USBSID_MEMORY
   temp_buffer = us_alloc(2 * LEN_TMP_BUFFER, (sizeof(uint8_t)) * (LEN_TMP_BUFFER));
-#endif
+  #endif
 
   /* Initialize libusb */
   rc = libusb_init(&ctx);
@@ -936,7 +1003,15 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
   if (LIBUSB_ConfigureDevice() < 0) {
     goto out;
   }
+  #ifdef US_UNMUTE_ON_ENTRY
+  USBSID_UnMute();
+  #endif
+  #ifdef US_RESET_ON_ENTRY
   USBSID_Reset();
+  #endif
+  #ifdef US_CLEARBUS_ON_ENTRY
+  USBSID_ClearBus();
+  #endif
   LIBUSB_InitOutBuffer();
   LIBUSB_InitInBuffer();
 
@@ -959,8 +1034,13 @@ int USBSID_Class::LIBUSB_Exit(void)
 {
 
   if (rc >= 0) {
-    LIBUSB_StopThread();
+    USBSID_StopThread();
+    #ifdef US_MUTE_ON_EXIT
+    USBSID_Mute();
+    #endif
+    #ifdef US_RESET_ON_EXIT
     USBSID_Reset();
+    #endif
     LIBUSB_StopTransfers();
     LIBUSB_FreeInBuffer();
     LIBUSB_FreeOutBuffer();
@@ -993,6 +1073,7 @@ void LIBUSB_CALL USBSID_Class::usb_out(struct libusb_transfer *transfer)
 
   // BUG: Resubmit is shit for normal tunes but good for cycle exact digitunes, sigh...
   // if (threaded) libusb_submit_transfer(transfer_out);  /* Resubmit queue when finished */
+  return;
 }
 
 void LIBUSB_CALL USBSID_Class::usb_in(struct libusb_transfer *transfer)
@@ -1010,6 +1091,7 @@ void LIBUSB_CALL USBSID_Class::usb_in(struct libusb_transfer *transfer)
 
   memcpy(result, in_buffer, 1);
   read_completed = 1;
+  return;
 }
 
 

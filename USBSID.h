@@ -58,6 +58,20 @@
 
 #include <libusb.h>
 
+/* Optional driver start and driver exit commands
+ *
+ * Some players do weird things on start, choose
+ * any of these to suit your own needs
+ *
+ */
+
+// #define US_RESET_ON_ENTRY     /* Send Reset SID command on LIBUSB Entry */
+// #define US_CLEARBUS_ON_ENTRY  /* Send Clear Bus command on LIBUSB Entry */
+// #define US_UNMUTE_ON_ENTRY    /* Send UnMute SID command on LIBUSB Exit */
+
+// #define US_MUTE_ON_EXIT       /* Send Mute SID command on LIBUSB Exit */
+// #define US_RESET_ON_EXIT      /* Send Reset SID command on LIBUSB Exit */
+
 
 /* #define USBSID_DEBUG */
 #ifdef USBSID_DEBUG
@@ -204,6 +218,8 @@ namespace USBSID_NS
   static long cycles_per_sec    = DEFAULT;     /* default @ 1000000 */
   static long cycles_per_frame  = HZ_DEFAULT;  /* default @ 20000 */
   static long cycles_per_raster = R_DEFAULT;   /* default @ 20000 */
+  static int clk_retrieved = 0;
+  static long us_clkrate = 0;
 
   /* Timing related */
   typedef std::nano                                      ratio_t;      /* 1000000000 */
@@ -214,13 +230,14 @@ namespace USBSID_NS
   static timestamp_t m_StartTime   = std::chrono::high_resolution_clock::now();
   static timestamp_t m_LastTime    = m_StartTime;
 
+  static volatile int us_thread = 0;
+  static pthread_mutex_t us_mutex;
   class USBSID_Class {
     private:
 
       /* LIBUSB */
       int LIBUSB_Setup(bool start_threaded, bool with_cycles);
       int LIBUSB_Exit(void);
-      void LIBUSB_StopThread(void);
       void LIBUSB_StopTransfers(void);
       int LIBUSB_OpenDevice(void);
       void LIBUSB_CloseDevice(void);
@@ -238,9 +255,10 @@ namespace USBSID_NS
 
       /* Threading */
       void* USBSID_Thread(void);
+      int USBSID_InitThread(void);
       void USBSID_StopThread(void);
       int USBSID_IsRunning(void);
-      pthread_t ptid;
+      pthread_t us_ptid;
 
       /* Ringbuffer */
       void USBSID_RingPopCycled(void);  /* Threaded writer with cycles */
@@ -281,8 +299,9 @@ namespace USBSID_NS
       /* TODO: Add function to retrieve the amount of sids configured */
 
       /* Synchronous direct */
-      void USBSID_SingleWrite(unsigned char *buff, size_t len);  /* Single write buffer of size_t ~ example: config writing */
-      unsigned char USBSID_SingleRead(uint8_t reg);              /* Single read register, return result */
+      void USBSID_SingleWrite(unsigned char *buff, size_t len);                /* Single write buffer of size_t ~ example: config writing */
+      unsigned char USBSID_SingleRead(uint8_t reg);                            /* Single read register, return result */
+      unsigned char USBSID_SingleReadConfig(unsigned char *buff, size_t len);  /* Single to buffer of specified length ~ example: config reading */
 
       /* Asynchronous direct */
       void USBSID_Write(unsigned char *buff, size_t len);                    /* Write buffer of size_t len */
