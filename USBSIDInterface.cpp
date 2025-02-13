@@ -79,6 +79,9 @@ extern "C"
   long getrasterrate_USBSID(USBSIDitf p){
     return ((USBSID_Class*)p)->USBSID_GetRasterRate();
   };
+  int getnumsids_USBSID(USBSIDitf p){
+    return ((USBSID_Class*)p)->USBSID_GetNumSIDs();
+  }
   void writesingle_USBSID(USBSIDitf p, unsigned char *buff, size_t len){
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_SingleWrite(buff, len);

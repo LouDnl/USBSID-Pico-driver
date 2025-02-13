@@ -220,6 +220,7 @@ namespace USBSID_NS
   static long cycles_per_raster = R_DEFAULT;   /* default @ 20000 */
   static int clk_retrieved = 0;
   static long us_clkrate = 0;
+  static int numsids = 0;
 
   /* Timing related */
   typedef std::nano                                      ratio_t;      /* 1000000000 */
@@ -284,20 +285,20 @@ namespace USBSID_NS
       /* USBSID */
       int USBSID_Init(bool start_threaded, bool with_cycles);
       int USBSID_Close(void);
-      void USBSID_Pause(void);                          /* Pause playing by releasing chipselect pins */
-      void USBSID_Reset(void);                          /* Reset all SID chips */
-      void USBSID_ResetAllRegisters(void);              /* Reset register for all SID chips */
-      void USBSID_Mute(void);                           /* Mute all SID chips */
-      void USBSID_UnMute(void);                         /* UnMute all SID chips */
-      void USBSID_DisableSID(void);                     /* Release reset pin and unmute SID */
-      void USBSID_EnableSID(void);                      /* Assert reset pin and release chipselect pins */
-      void USBSID_ClearBus(void);                       /* Clear the SID bus from any data */
-      void USBSID_SetClockRate(long clockrate_cycles,   /* Set CPU clockrate in Hertz */
-                               bool suspend_sids);      /* Assert SID RES signal while changing clockrate (Advised!)*/
-      long USBSID_GetClockRate(void);                   /* Get CPU clockrate in Hertz  */
-      long USBSID_GetRefreshRate(void);                 /* Get cycles per refresh rate */
-      long USBSID_GetRasterRate(void);                  /* Get cycles per raster rate */
-      /* TODO: Add function to retrieve the amount of sids configured */
+      void USBSID_Pause(void);                         /* Pause playing by releasing chipselect pins */
+      void USBSID_Reset(void);                         /* Reset all SID chips */
+      void USBSID_ResetAllRegisters(void);             /* Reset register for all SID chips */
+      void USBSID_Mute(void);                          /* Mute all SID chips */
+      void USBSID_UnMute(void);                        /* UnMute all SID chips */
+      void USBSID_DisableSID(void);                    /* Release reset pin and unmute SID */
+      void USBSID_EnableSID(void);                     /* Assert reset pin and release chipselect pins */
+      void USBSID_ClearBus(void);                      /* Clear the SID bus from any data */
+      void USBSID_SetClockRate(long clockrate_cycles,  /* Set CPU clockrate in Hertz */
+                               bool suspend_sids);     /* Assert SID RES signal while changing clockrate (Advised!)*/
+      long USBSID_GetClockRate(void);                  /* Get CPU clockrate in Hertz  */
+      long USBSID_GetRefreshRate(void);                /* Get cycles per refresh rate */
+      long USBSID_GetRasterRate(void);                 /* Get cycles per raster rate */
+      int USBSID_GetNumSIDs(void);                     /* Get the number of sids configured */
 
       /* Synchronous direct */
       void USBSID_SingleWrite(unsigned char *buff, size_t len);                /* Single write buffer of size_t ~ example: config writing */
@@ -333,7 +334,7 @@ namespace USBSID_NS
       uint_fast64_t USBSID_CycleFromTimestamp(timestamp_t timestamp);  /* Returns cycles since m_StartTime */
 
       /* Utils */
-      /* TODO: Migrate function to use a jumptable */
+      /* TODO: Deprecate this function, emulator/player should handle this */
       uint8_t USBSID_Address(uint16_t addr);  /* Calculates correct SID address to write to if player does not */
   };
 

@@ -239,6 +239,19 @@ long USBSID_Class::USBSID_GetRasterRate(void)
   return cycles_per_raster;
 }
 
+int USBSID_Class::USBSID_GetNumSIDs(void)
+{
+  if (numsids == 0) {
+    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x39, 0, 0, 0, 0};
+    USBSID_SingleWrite(configbuff, 6);
+    numsids = USBSID_SingleReadConfig(result, 1);
+    return numsids;
+  } else {
+    return numsids;
+  }
+  return 0;
+}
+
 
 /* SYNCHRONOUS */
 

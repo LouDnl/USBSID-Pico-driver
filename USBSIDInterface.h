@@ -45,6 +45,7 @@ extern "C" {
   long getclockrate_USBSID(USBSIDitf);
   long getrefreshrate_USBSID(USBSIDitf);
   long getrasterrate_USBSID(USBSIDitf);
+  int getnumsids_USBSID(USBSIDitf);
   /* TODO: Add all remaining namespace functions */
 
   /* Synchronous direct */
