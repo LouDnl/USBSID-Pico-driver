@@ -171,21 +171,35 @@ namespace USBSID_NS
   } ring_buffer;
   static ring_buffer ringbuffer;
 
-  /* Clock speed: 0.985 MHz (PAL) or 1.023 MHz (NTSC) */
+  /* Clock cycles per second
+   * Clock speed: 0.985 MHz (PAL) or 1.023 MHz (NTSC)
+   *
+   * For some reason both 1022727 and 1022730 are
+   * mentioned as NTSC clock cycles per second
+   * Going for the rates specified by Vice it should
+   * be 1022730, except in the link about raster time
+   * on c64 wiki it's 1022727.
+   * I chose to implement both, let's see how this
+   * works out
+   *
+   * https://sourceforge.net/p/vice-emu/code/HEAD/tree/trunk/vice/src/c64/c64.h
+   */
+
+  /* Clock cycles per second */
   enum clock_speeds
   {
-      DEFAULT = 1000000,  /* 1 MHz     = 1 us */
-      PAL     = 985248,   /* 0.985 MHz = 1.014973 us */
-      NTSC    = 1022730,  /* 1.023 MHz = 0.977778 us */
-      DREAN   = 1023440,  /* 1.023 MHz = 0.977097 us */
+    DEFAULT = 1000000,  /* 1 MHz     = 1 us */
+    PAL     = 985248,   /* 0.985 MHz = 1.014973 us */
+    NTSC    = 1022727,  /* 1.023 MHz = 0.977778 us */
+    DREAN   = 1023440,  /* 1.023 MHz = 0.977097 us */
+    NTSC2   = 1022730,  /* 1.023 MHz = 0.977778 us */
   };
   /* Refreshrates (cycles) in microseconds */
   enum refresh_rates
   {
-      HZ_DEFAULT = 20000,  /* 50Hz ~ 20000 == 20 us */
-      HZ_EU      = 19950,  /* 50Hz ~ 20000 == 20 us    / 50.125Hz ~ 19.950124688279 exact */
-      HZ_US      = 16715,  /* 60Hz ~ 16667 == 16.67 us / 59.826Hz ~ 16.715140574332 exact */
-      HZ_GLOBAL  = 16715,  /* 60Hz ~ 16667 == 16.67 us / 59.826Hz ~ 16.715140574332 exact */
+    HZ_DEFAULT = 20000,  /* 50Hz ~ 20000 == 20 us */
+    HZ_EU      = 19950,  /* 50Hz ~ 20000 == 20 us    / 50.125Hz ~ 19.950124688279 exact */
+    HZ_US      = 16715,  /* 60Hz ~ 16667 == 16.67 us / 59.826Hz ~ 16.715140574332 exact */
   };
   /* Rasterrates (cycles) in microseconds
    * Source: https://www.c64-wiki.com/wiki/raster_time
@@ -210,11 +224,10 @@ namespace USBSID_NS
     R_DEFAULT = 20000,  /* 20us  ~ fallback */
     R_EU      = 19656,  /* PAL:  63 cycles * 312 lines = 19656 cycles per frame update @  985248 Hz = 50.12 Hz frame rate */
     R_US      = 17096,  /* NTSC: 65 cycles * 263 lines = 17096 cycles per frame update @ 1022727 Hz = 59.83 Hz Hz frame rate */
-    R_GLOBAL  = 17096,  /* NTSC */
   };
-  static const enum clock_speeds clockSpeed[]   = { DEFAULT, PAL, NTSC, DREAN };
-  static const enum refresh_rates refreshRate[] = { HZ_DEFAULT, HZ_EU, HZ_US, HZ_GLOBAL };
-  static const enum raster_rates rasterRate[]   = { R_DEFAULT, R_EU, R_US, R_GLOBAL };
+  static const enum clock_speeds clockSpeed[]   = { DEFAULT, PAL, NTSC, DREAN, NTSC2 };
+  static const enum refresh_rates refreshRate[] = { HZ_DEFAULT, HZ_EU, HZ_US, HZ_US, HZ_US };
+  static const enum raster_rates rasterRate[]   = { R_DEFAULT, R_EU, R_US, R_US, R_US };
   static long cycles_per_sec    = DEFAULT;     /* default @ 1000000 */
   static long cycles_per_frame  = HZ_DEFAULT;  /* default @ 20000 */
   static long cycles_per_raster = R_DEFAULT;   /* default @ 20000 */
