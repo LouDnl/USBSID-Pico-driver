@@ -113,7 +113,7 @@ int USBSID_Class::USBSID_Init(bool start_threaded, bool with_cycles)
 
 int USBSID_Class::USBSID_Close(void)
 {
-  int e;
+  int e = -1;
   if (rc >= 0) e = LIBUSB_Exit();
   if (rc != -1) USBERR(stderr, "Expected rc == -1, received: %d\n", rc);
   if (e != 0) USBERR(stderr, "Expected e == 0, received: %d\n", e);
