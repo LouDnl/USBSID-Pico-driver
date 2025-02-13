@@ -301,7 +301,7 @@ unsigned char USBSID_Class::USBSID_SingleReadConfig(unsigned char *buff, size_t 
 void USBSID_Class::USBSID_Write(unsigned char *buff, size_t len)
 {
   if (len == 3 && (threaded || withcycles)) {
-    USBERR(stderr, "[USBSID] Function '%s' cannot be used with length %ld when threaded (%d) and/or withcycles (%d) are enabled\n", __func__, len, threaded, withcycles);
+    USBERR(stderr, "[USBSID] Function '%s' cannot be used with length %lld when threaded (%d) and/or withcycles (%d) are enabled\n", __func__, len, threaded, withcycles);
     return;
   }
   write_completed = 0;
