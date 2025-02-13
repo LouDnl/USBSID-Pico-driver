@@ -14,3 +14,9 @@
 !.gitignore
 !README.md
 !LICENSE
+
+# Not these directories and their contents
+!vice-makefile
+!vice-makefile/*
+!webusb
+!webusb/*
