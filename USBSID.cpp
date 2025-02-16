@@ -252,6 +252,15 @@ int USBSID_Class::USBSID_GetNumSIDs(void)
   return 0;
 }
 
+int USBSID_Class::USBSID_GetFMOplSID(void)
+{
+  if (fmoplsid == -1) {
+    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x3A, 0, 0, 0, 0};
+    USBSID_SingleWrite(configbuff, 6);
+    fmoplsid = USBSID_SingleReadConfig(result, 1);
+  }
+  return fmoplsid;
+}
 
 /* SYNCHRONOUS */
 
