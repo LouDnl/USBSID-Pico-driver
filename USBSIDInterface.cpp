@@ -94,11 +94,11 @@ extern "C"
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_Write(buff, len);
   };
-  void write_USBSID(USBSIDitf p, uint16_t reg, uint8_t val){
+  void write_USBSID(USBSIDitf p, uint8_t reg, uint8_t val){
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_Write(reg, val);
   };
-  void writecycled_USBSID(USBSIDitf p, uint16_t reg, uint8_t val, uint16_t cycles){
+  void writecycled_USBSID(USBSIDitf p, uint8_t reg, uint8_t val, uint16_t cycles){
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_Write(reg, val, cycles);
   };
@@ -106,11 +106,11 @@ extern "C"
     if( p == NULL ) return 0;
     return ((USBSID_Class*)p)->USBSID_Read(writebuff);
   };
-  void writering_USBSID(USBSIDitf p, uint16_t reg, uint8_t val){
+  void writering_USBSID(USBSIDitf p, uint8_t reg, uint8_t val){
     if( p == NULL ) return;
     return ((USBSID_Class*) p)->USBSID_WriteRing(reg, val);
   };
-  void writeringcycled_USBSID(USBSIDitf p, uint16_t reg, uint8_t val, uint16_t cycles){
+  void writeringcycled_USBSID(USBSIDitf p, uint8_t reg, uint8_t val, uint16_t cycles){
     if( p == NULL ) return;
     return ((USBSID_Class*) p)->USBSID_WriteRingCycled(reg, val, cycles);
   };
