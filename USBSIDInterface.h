@@ -23,6 +23,9 @@
  *
  */
 
+#ifndef _USBSID_INTERFACE_H_
+#define _USBSID_INTERFACE_H_
+
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -76,3 +79,5 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* _USBSID_INTERFACE_H_ */
