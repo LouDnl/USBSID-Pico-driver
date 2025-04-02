@@ -82,6 +82,18 @@ extern "C"
   int getnumsids_USBSID(USBSIDitf p){
     return ((USBSID_Class*)p)->USBSID_GetNumSIDs();
   }
+  bool available_USBSID(USBSIDitf p) {
+    return ((USBSID_Class*)p)->us_Available;
+  }
+  bool initialised_USBSID(USBSIDitf p) {
+    return ((USBSID_Class*)p)->us_Initialised;
+  }
+  bool portisopen_USBSID(USBSIDitf p) {
+    return ((USBSID_Class*)p)->us_PortIsOpen;
+  }
+  int found_USBSID(USBSIDitf p) {
+    return ((USBSID_Class*)p)->us_Found;
+  }
   void writesingle_USBSID(USBSIDitf p, unsigned char *buff, size_t len){
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_SingleWrite(buff, len);

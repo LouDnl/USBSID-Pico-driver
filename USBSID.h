@@ -253,6 +253,7 @@ namespace USBSID_NS
       /* LIBUSB */
       int LIBUSB_Setup(bool start_threaded, bool with_cycles);
       int LIBUSB_Exit(void);
+      int LIBUSB_Available(libusb_context *ctx, uint16_t vendor_id, uint16_t product_id);
       void LIBUSB_StopTransfers(void);
       int LIBUSB_OpenDevice(void);
       void LIBUSB_CloseDevice(void);
@@ -291,7 +292,10 @@ namespace USBSID_NS
       USBSID_Class();   /* Constructor */
       ~USBSID_Class();  /* Deconstructor */
 
+      bool us_Available;
       bool us_Initialised;
+      bool us_PortIsOpen;
+      int us_Found;
       #ifdef DEBUG_USBSID_MEMORY
       bool us_DebugMemory = false;
       #endif

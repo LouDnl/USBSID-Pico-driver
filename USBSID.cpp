@@ -60,7 +60,10 @@ extern "C" {
 /* USBSID */
 
 USBSID_Class::USBSID_Class() :
-  us_Initialised(false)
+  us_Available(false),
+  us_Initialised(false),
+  us_PortIsOpen(false),
+  us_Found(0)
 {
   #ifdef DEBUG_USBSID_MEMORY
   us_DebugMemory = true;
@@ -104,6 +107,7 @@ int USBSID_Class::USBSID_Init(bool start_threaded, bool with_cycles)
     if (threaded) {
       rc = USBSID_InitThread();
     }
+    us_PortIsOpen = true;
     return rc;
   } else {
     USBDBG(stdout, "[USBSID] Not found\n");
@@ -118,6 +122,7 @@ int USBSID_Class::USBSID_Close(void)
   if (rc != -1) USBERR(stderr, "Expected rc == -1, received: %d\n", rc);
   if (e != 0) USBERR(stderr, "Expected e == 0, received: %d\n", e);
   if (devh != NULL) USBERR(stderr, "Expected dev == NULL, received: %p", (void*)&devh);
+  us_PortIsOpen = false;
   USBDBG(stdout, "[USBSID] De-init finished\n");
   return 0;
 }
@@ -834,6 +839,34 @@ void USBSID_Class::LIBUSB_CloseDevice(void)
   return;
 }
 
+int USBSID_Class::LIBUSB_Available(libusb_context *ctx, uint16_t vendor_id, uint16_t product_id)
+{
+	struct libusb_device **devs;
+	struct libusb_device *dev;
+	size_t i = 0;
+	int r;
+  us_Available = false;
+  us_Found = 0;
+
+	if (libusb_get_device_list(ctx, &devs) < 0)
+		return 0;
+
+	while ((dev = devs[i++]) != NULL) {
+		struct libusb_device_descriptor desc;
+		r = libusb_get_device_descriptor(dev, &desc);
+		if (r < 0)
+			goto out;
+		if (desc.idVendor == vendor_id && desc.idProduct == product_id) {
+			us_Available = true;
+      us_Found++;
+			continue;
+		}
+	}
+out:
+	libusb_free_device_list(devs, 1);
+	return (us_Available ? us_Found : 0);
+}
+
 int USBSID_Class::LIBUSB_DetachKernelDriver(void)
 {
   USBDBG(stdout, "[USBSID] Detach kernel driver\r\n");
@@ -1015,6 +1048,12 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
 
   /* Set debugging output to min/max (4) level */
   libusb_set_option(ctx, LIBUSB_OPTION_LOG_LEVEL, 0);
+
+  /* Check for an available USBSID-Pico */
+  if (LIBUSB_Available(ctx, VENDOR_ID, PRODUCT_ID) <= 0) {
+    USBERR(stderr, "[USBSID] No USBSID-Pico found, is the device plugged in?\n");
+    goto out;
+  }
 
   if (LIBUSB_OpenDevice() < 0) {
     goto out;

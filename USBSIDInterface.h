@@ -52,6 +52,12 @@ extern "C" {
   int getnumsids_USBSID(USBSIDitf);
   /* TODO: Add all remaining namespace functions */
 
+  /* Helpers */
+  bool available_USBSID(USBSIDitf);
+  bool initialised_USBSID(USBSIDitf);
+  bool portisopen_USBSID(USBSIDitf);
+  int found_USBSID(USBSIDitf);
+
   /* Synchronous direct */
   void writesingle_USBSID(USBSIDitf, unsigned char *buff, size_t len);
   unsigned char readsingle_USBSID(USBSIDitf, uint8_t reg);
