@@ -7,15 +7,20 @@
 !*.cpp
 !*.h
 !*.hpp
+!*.java
 !*.js
 !*.am
+!*.xml
 
 # And not these specific files
 !.gitignore
 !README.md
 !LICENSE
+!javax.usb.properties
 
 # Not these directories and their contents
+!java
+!java/**
 !vice-makefile
 !vice-makefile/*
 !webusb
