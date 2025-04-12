@@ -355,7 +355,7 @@ void USBSID_Class::USBSID_Write(unsigned char *buff, size_t len, uint16_t cycles
 
 void USBSID_Class::USBSID_Write(uint8_t reg, uint8_t val, uint16_t cycles)
 {
-  if (threaded || withcycles) {
+  if (threaded) {
     USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) and/or withcycles (%d) are enabled\n", __func__, threaded, withcycles);
     return;
   }
@@ -371,7 +371,7 @@ void USBSID_Class::USBSID_Write(uint8_t reg, uint8_t val, uint16_t cycles)
 void USBSID_Class::USBSID_WriteCycled(uint8_t reg, uint8_t val, uint16_t cycles)
 {
   if (threaded) {
-    USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) and/or withcycles (%d) are enabled\n", __func__, threaded, withcycles);
+    USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) is enabled\n", __func__, threaded);
     return;
   }
   write_completed = 0;

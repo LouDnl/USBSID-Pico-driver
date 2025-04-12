@@ -112,7 +112,7 @@ extern "C"
   };
   void writecycled_USBSID(USBSIDitf p, uint8_t reg, uint8_t val, uint16_t cycles){
     if( p == NULL ) return;
-    return ((USBSID_Class*)p)->USBSID_Write(reg, val, cycles);
+    return ((USBSID_Class*)p)->USBSID_WriteCycled(reg, val, cycles);
   };
   unsigned char read_USBSID(USBSIDitf p, unsigned char *writebuff){
     if( p == NULL ) return 0;
