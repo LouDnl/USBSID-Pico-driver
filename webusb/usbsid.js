@@ -1,85 +1,40 @@
-/*
- * USBSID-Pico is a RPi Pico (RP2040) based board for interfacing one or two
- * MOS SID chips and/or hardware SID emulators over (WEB)USB with your computer,
- * phone or ASID supporting player
- *
- * usbsid.js
- * This file is part of USBSID-Pico (https://github.com/LouDnl/USBSID-Pico)
- * File author: LouD
- *
- * Copyright (c) 2024-2025 LouD
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 2.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
- */
-
-/* Open Issues & Bugs:
- * every write returns a confirmation, without await this confirmation comes way later, causing a delay
- * disabling return wait makes perfect play but up to 30~60 second delay after stop, new tune or reset
- * enabling return wait causes slow play and stuttering but immediate reset etc.
- *
- * Breaking connection prematurely during play causes massive spam and or computer lock up due to this spam:
- * 64jukebox.vue:1 Uncaught (in promise) NetworkError: Failed to execute 'transferOut' on 'USBDevice': A transfer error has occurred.Understand this errorAI
- * c64jukebox.vue:1 Uncaught (in promise) AbortError: Failed to execute 'transferOut' on 'USBDevice': The transfer was cancelled.
- */
-
-/* Set player type here */
-const sidplayers = ['hermit', 'jsidplay2'];
-const PLAYER = sidplayers[1];
-
-/* WebUSB Constants */
-const USBSID_VID    = 0xcafe;
-const USBSID_PID    = 0x4011;
-const DEVICE_CLASS  = 0xff;
+/* WebUSB constants */
+const CDC_CLASS     = 0x0A; /* Interface 1 */
+const DEVICE_CLASS  = 0xFF; /* Interface 4 */
 const CTRL_TRANSFER = 0x22;
 const CTRL_ENABLE   = 0x01;
 const CTRL_DISABLE  = 0x00;
-/* Setting these at lets say 256 works, but for each 64KB a URB_SUCCESS is returned */
-const BUFFER_SIZE      = 64;  /* 64KB for one USB packet */
-const PACKET_SIZE      = 64;  /* Used in usbsid_threadoutput */
-const MAX_WRITE_BYTES  =  3;  /* 1 Start byte, 1 register, 1 value */
-const MAX_CYCLED_BYTES = 61;  /* 1 Start byte, 60 / 4 cycled writes */
-/* WebUSB variables */
-var interfaces;
-var usbsid = {};
-var initialized = false,
-    allow_play = false,
-    error = false,
-    cycled = true,
-    async = false;
-/* Buffer */
-var backbuf, bufferQueue;
-var backbufIdx = 1,
-    flush = 0;
+
+/* USBSID constants */
+const USBSID_VID = 0xcafe;
+const USBSID_PID = 0x4011;
+
+/* Buffer constants */
+const BUFFER_SIZE       = 64; /* 64KB for one USB packet */
+const MAX_PACKET_SIZE   = 64; /* Absolute maximum amount of bytes per packet */
+const MAX_WRITE_BYTES   =  3; /* 1 Start byte, 1 register, 1 value */
+const MAX_CYCLED_BYTES  =  5; /* 1 Start byte, 1 register, 1 value, 1 cycles_hi, 1 cycles_lo */
+const MAX_WRITE_BUFFER  = 63; /* 1 Start byte, 62 / 2 writes */
+const MAX_CYCLED_BUFFER = 61; /* 1 Start byte, 60 / 4 cycled writes */
 
 /* USBSID Command byte constants */
 /* BYTE 0 - top 2 bits */
-const WRITE        =   0;   /*        0b0 ~ 0x00 */
-const READ         =   1;   /*        0b1 ~ 0x40 */
-const CYCLED_WRITE =   2;   /*       0b10 ~ 0x80 */
-const COMMAND      =   3;   /*       0b11 ~ 0xC0 */
+const WRITE        =  0; /*        0b0 ~ 0x00 */
+const READ         =  1; /*        0b1 ~ 0x40 */
+const CYCLED_WRITE =  2; /*       0b10 ~ 0x80 */
+const COMMAND      =  3; /*       0b11 ~ 0xC0 */
 /* BYTE 0 - lower 5 bits for Commands */
-const PAUSE        =  10;   /*     0b1010 ~ 0x0A */
-const UNPAUSE      =  11;   /*     0b1011 ~ 0x0B */
-const MUTE         =  12;   /*     0b1100 ~ 0x0C */
-const UNMUTE       =  13;   /*     0b1101 ~ 0x0D */
-const RESET_SID    =  14;   /*     0b1110 ~ 0x0E */
-const DISABLE_SID  =  15;   /*     0b1111 ~ 0x0F */
-const ENABLE_SID   =  16;   /*    0b10000 ~ 0x10 */
-const CLEAR_BUS    =  17;   /*    0b10001 ~ 0x11 */
-const CONFIG       =  18;   /*    0b10010 ~ 0x12 */
-const RESET_MCU    =  19;   /*    0b10011 ~ 0x13 */
-const BOOTLOADER   =  20;   /*    0b10100 ~ 0x14 */
+const PAUSE        = 10; /*     0b1010 ~ 0x0A */
+const UNPAUSE      = 11; /*     0b1011 ~ 0x0B */
+const MUTE         = 12; /*     0b1100 ~ 0x0C */
+const UNMUTE       = 13; /*     0b1101 ~ 0x0D */
+const RESET_SID    = 14; /*     0b1110 ~ 0x0E */
+const DISABLE_SID  = 15; /*     0b1111 ~ 0x0F */
+const ENABLE_SID   = 16; /*    0b10000 ~ 0x10 */
+const CLEAR_BUS    = 17; /*    0b10001 ~ 0x11 */
+const CONFIG       = 18; /*    0b10010 ~ 0x12 */
+const RESET_MCU    = 19; /*    0b10011 ~ 0x13 */
+const BOOTLOADER   = 20; /*    0b10100 ~ 0x14 */
 /* BYTE 0 - lower 6 bits for byte count */
 
 /* USBSID WEBUSB Command constants */
@@ -88,12 +43,6 @@ const WEBUSB_RESET    = 0x15;
 const WEBUSB_CONTINUE = 0x16;
 
 /* USBSID Config constants */
-const clock_rates = {
-  DEFAULT: 0, /* 1000000 */
-  PAL:     1, /*  985248 */
-  NTSC:    2, /* 1022727 */
-  DREAN:   3, /* 1023440 */
-};
 const RESET_USBSID     = 0x20;
 const READ_CONFIG      = 0x30;
 const APPLY_CONFIG     = 0x31;
@@ -116,320 +65,431 @@ const LOAD_MIDI_STATE  = 0x60;
 const SAVE_MIDI_STATE  = 0x61;
 const RESET_MIDI_STATE = 0x63;
 const USBSID_VERSION   = 0x80;
+const TOGGLE_AUDIO     = 0x88; /* Toggle mono <-> stereo (v1.3+ boards only) */
+const SET_AUDIO        = 0x89; /* Set mono <-> stereo (v1.3+ boards only) */
 
+/* USBSID SID related constants */
+const clock_rates = {
+  DEFAULT: 0, /* 1000000 */
+  PAL:     1, /*  985248 */
+  NTSC:    2, /* 1022727 */
+  DREAN:   3, /* 1023440 */
+};
 
-/* WebUSB internal functions */
+/* Global delay function */
+const us_delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function webusb_requestdev(device) {
-  if (typeof device !== "undefined") {
-    usbsid = device;
-  } else {
-    usbsid = await navigator.usb.requestDevice({
-      filters: [
-        {
-          vendorId: USBSID_VID,
-          productId: USBSID_PID,
-        },
-      ],
+/* USBSID main class */
+class USBSID {
+  constructor(classtype = DEVICE_CLASS, async_await = true, buffered = true) {
+    this.interfaces;
+    this.device = {};
+    this.classtype = classtype;
+    this.async_await = async_await;
+    this.buffered = buffered;
+  }
+
+  async webusb_findinterface(connectType) {
+    this.interfaces = this.device.configuration.interfaces;
+    this.interfaces.forEach((element) => {
+      element.alternates.forEach((elementalt) => {
+        if (elementalt.interfaceClass == connectType) {
+          this.device.interfaceNumber = element.interfaceNumber;
+          elementalt.endpoints.forEach((elementendpoint) => {
+            if (elementendpoint.direction == "out") {
+              this.device.endpointOut = elementendpoint.endpointNumber;
+            }
+            if (elementendpoint.direction == "in") {
+              this.device.endpointIn = elementendpoint.endpointNumber;
+            }
+          });
+        }
+      });
     });
   }
-}
 
-async function webusb_findinterface() {
-  interfaces = usbsid.configuration.interfaces;
-  interfaces.forEach((element) => {
-    element.alternates.forEach((elementalt) => {
-      if (elementalt.interfaceClass == DEVICE_CLASS) {
-        usbsid.interfaceNumber = element.interfaceNumber;
-        elementalt.endpoints.forEach((elementendpoint) => {
-          if (elementendpoint.direction == "out") {
-            usbsid.endpointOut = elementendpoint.endpointNumber;
-          }
-          if (elementendpoint.direction == "in") {
-            usbsid.endpointIn = elementendpoint.endpointNumber;
-          }
-        });
-      }
-    });
-  });
-}
-
-async function webusb_open() {
-  if (usbsid !== undefined) {
-    console.log(`Product name: ${usbsid.productName}, Product Id: ${usbsid.productId.toString(16)}`);
+  async init(dev) {
     try {
-      /* open the device */
-      await usbsid.open();
+      const self = this;
 
-      /* select config 1 */
-      await usbsid.selectConfiguration(1);
+      if (typeof dev !== "undefined") {
+        self.device = dev;
+      } else {
+        self.device = await navigator.usb.requestDevice({
+          filters: [
+            {
+              vendorId: USBSID_VID,
+              productId: USBSID_PID,
+            },
+          ],
+        });
 
-      /* find the vendor class webusb interface to connect to */
-      await webusb_findinterface();
-
-      /* claim the interface */
-      await usbsid.claimInterface(usbsid.interfaceNumber);
-      /* select the interface */
-      await usbsid.selectAlternateInterface(usbsid.interfaceNumber, 0);
-      /* enable the interface */
-      await usbsid.controlTransferOut({
-        requestType: "class",
-        recipient: "interface",
-        request: CTRL_TRANSFER,
-        value: CTRL_ENABLE,
-        index: usbsid.interfaceNumber,
-      });
-      // usbsid.transferIn(usbsid.interfaceNumber, 64); // flush buffer
-      if (usbsid.opened) {
-        initialized = true;
-        error = false;
+        if (self.device == null) {
+          throw new Error("Could not find USBSID-Pico");
+        }
+        await self.device.open();
+        console.log("USBSID-Pico opened:", self.device.opened);
       }
-    } catch (error) {
-      console.error(error);
-      error = true;
+      console.log("?" + self.device);
+
+      self.isClosing = false;
+      if (typeof self.device !== "undefined") {
+        if (self.device.configuration === null) {
+          console.log("selectConfiguration");
+          await self.device.selectConfiguration(1);
+        }
+        console.log("Start device claim");
+        await self.webusb_findinterface(self.classtype);
+        await self.device.claimInterface(self.device.interfaceNumber);
+        await self.device.selectConfiguration(1);
+        await self.device.selectAlternateInterface(self.device.interfaceNumber, 0);
+        /* enable the interface */
+        if (self.classtype === DEVICE_CLASS) {
+          await self.device.controlTransferOut({
+            requestType: "class",
+            recipient: "interface",
+            request: CTRL_TRANSFER,
+            value: CTRL_ENABLE,
+            index: self.device.interfaceNumber,
+          });
+        }
+      }
+    } catch (err) {
+      console.error(err);
     }
   }
-}
 
-
-/* USBSID-Pico functions */
-
-async function usbsid_connect(device) {
-  if (error) {
-    error = false;
-  }
-  if (initialized) {
-    await usbsid_disconnect();
-  }
-  await webusb_requestdev(device);
-  await webusb_open();
-}
-
-async function usbsid_disconnect() {
-  try {
-    if (initialized) {
-      await usbsid.controlTransferOut({
-        requestType: "class",
-        recipient: "interface",
-        request: CTRL_TRANSFER,
-        value: CTRL_DISABLE,
-        index: usbsid.interfaceNumber,
-      });
-      /* await usbsid.reset(); */
-      await usbsid.releaseInterface(usbsid.interfaceNumber);
-      await usbsid.close();
-      initialized = false;
-      error = false;
+  async write(buffer) {
+    const result = this.device.transferOut(this.device.endpointOut, buffer);
+    if (this.async_await) {
+      const r = await Promise.resolve(result);
+      return r;
     }
-  } catch (error) {
-    console.error(error);
-    error = true;
+  }
+
+  async close() {
+    this.isClosing = true;
+    try {
+      await this.device.releaseInterface(this.device.interfaceNumber);
+      await this.device.close();
+      console.log("Closed device");
+    } catch (err) {
+      console.log("Error:", err);
+    }
+  }
+
+  isOpen() {
+    return this.device.opened;
   }
 }
 
-async function usbsid_init(device, start_async = false, start_cycled = true) {
-  async = start_async;
-  cycled = start_cycled;
-  try {
-    await usbsid_connect(device);
-    if (initialized) {
-      allow_play = true;
-      backbuf = new Array(BUFFER_SIZE);
-      bufferQueue = new usbsid_queue();
-      backbufIdx = 1;
-      flush = 0;
+/** ----- USBSID-Pico ----- */
+
+/** Set player type here */
+const sidplayers = ["hermit", "jsidplay2"];
+const PLAYER = sidplayers[1];
+/** Cycle exact writing
+ * `true`  ~ each write is 4 bytes long
+ * `false` ~ each write is 2 bytes long
+ */
+const CYCLE_EXACT = true;
+/** Buffer writes before sending
+ * `true`  ~ writes will build up until full or flushed
+ * `false` ~ writes will be sent immediately
+ */
+const BUFFERED_WRITES = true;
+
+/* Variables */
+var max_buffer_size = CYCLE_EXACT && BUFFERED_WRITES ? MAX_CYCLED_BUFFER : MAX_WRITE_BUFFER;
+var write_cmd = (CYCLE_EXACT ? CYCLED_WRITE : WRITE) << 6;
+var usbsid, max_packet_size;
+var backbuf = new Array(BUFFER_SIZE);
+var backbufIdx = 1;
+var bufferQueue = new USBSID_queue();
+var rasterrate = 19656; /* 20000 */
+
+var c64clock = performance.now();
+var c64clock_now = performance.now();
+var flush_buff = 0;
+var cycledbuffer = new Array(MAX_CYCLED_BYTES);
+var cycledbuffer2 = new Array(MAX_CYCLED_BYTES);
+var cbIdx = 1,
+  cbIdx2 = 1;
+var cbWrDone = 1,
+  cbWrDone2 = 1;
+
+/** ----- main functions ----- */
+
+/** Helper `thread` that flushes data if timer exceeds rasterrate */
+async function USBSID_timer() {
+  c64clock_now = performance.now();
+  if (c64clock_now - c64clock >= rasterrate / 1000) {
+    c64clock = c64clock_now;
+    if (cbWrDone == 1 && cbIdx > 1) {
+      cycledbuffer[0] = (CYCLED_WRITE << 6) | (cbIdx - 1);
+      const result = usbsid.write(new Uint8Array(cycledbuffer.slice(0, cbIdx)));
+      if (usbsid.async_await) {
+        const r = await Promise.resolve(result);
+        return r;
+      }
+      cbIdx = 1;
+    }
+  }
+  timer2 = setTimeout(() => USBSID_timer());
+}
+
+/** Internal write thread ~ loops */
+async function USBSID_threadOutput() {
+  var bufferFrame;
+  while (bufferQueue.isNotEmpty()) {
+    bufferFrame = bufferQueue.dequeue();
+    /* exit condition */
+    if (bufferFrame.bufferIdx < 0) {
+      timer = null;
+      // timer2 = null;
       bufferQueue.clear();
-
-      timer = setTimeout(() => usbsid_threadoutput());
-      return 0;
+      return;
     }
-  } catch (error) {
-    console.error(error);
-    error = true;
-    return -1;
+    const result = uSwrite(bufferFrame.buffer, max_packet_size);
+    if (usbsid.async_await) {
+      const r = await Promise.resolve(result);
+      return r;
+    }
   }
+  /* restart the timer */
+  timer = setTimeout(() => USBSID_threadOutput());
 }
 
-async function usbsid_close() {
+/** Internal write to class function */
+async function uSwrite(buff, size) {
   try {
-    backbuf = undefined;
-    bufferQueue = undefined;
-    return await usbsid_disconnect();
-  } catch (error) {
-    console.error(error);
-    error = true;
-  }
-}
-
-
-/* Write functions */
-
-async function usbsid_write_direct(data) {
-  if (!initialized || error) {
-    return error;
-  }
-  if (allow_play)
-  try {
-    /* Temporary delay workaround ~ creates possibility to choose for the delay or not */
-    if (async) {
-      return await usbsid.transferOut(usbsid.endpointOut, data);
-    } else if (!async) {
-      usbsid.transferOut(usbsid.endpointOut, data);
+    const result = usbsid.write(new Uint8Array(buff.slice(0, size)));
+    if (usbsid.async_await) {
+      const r = await Promise.resolve(result);
+      return r;
     }
   } catch (error) {}
 }
 
-async function usbsid_write_array(array) {
-  if (allow_play)
+/** Init USBSID-Pico device
+ * required: device
+ * optional:
+ * classtype, defaults to DEVICE_CLASS
+ * async, defaults to true
+ * buffered, defaults to true
+ */
+async function USBSID_init(
+  device,
+  async_await = true,
+  buffered = true,
+  selfbuffered = false,
+  classtype = DEVICE_CLASS
+) {
+  if (usbsid && usbsid.device && usbsid.isOpen()) {
+    console.log("Device is already open!");
+    return -1;
+  }
   try {
-    return await usbsid_write_direct(new Uint8Array(array));
-  } catch (error) {
-    console.error(error);
-    error = true;
+    usbsid = new USBSID(classtype, async_await, buffered);
+    await usbsid.init(device);
+    max_packet_size = usbsid.buffered ? max_buffer_size : CYCLE_EXACT ? MAX_CYCLED_BYTES : MAX_WRITE_BYTES;
+    backbufIdx = 1;
+    bufferQueue.clear();
+    if (buffered) timer = setTimeout(() => USBSID_threadOutput());
+    if (selfbuffered) timer2 = setTimeout(() => USBSID_timer());
+
+    return 0;
+  } catch (err) {
+    console.log(err);
+    return -1;
   }
 }
 
-async function usbsid_write_buffer(buffer, size) {
-  if (!initialized || error) {
-    return error;
+/** De-init USBSID-Pico device */
+async function USBSID_deinit() {
+  if (usbsid) {
+    USBSID_reset(0);
+
+    uSoutb(0, -1); /* signal end of thread */
+
+    timer = null;
+    timer2 = null;
+    await USBSID_close();
+    device = undefined;
   }
-  if (allow_play)
-  try {
-    /* Temporary delay workaround ~ creates possibility to choose for the delay or not */
-    if (async) {
-      return await usbsid_write_direct(new Uint8Array(buffer.slice(0, size)));
-    } else if (!async) {
-      usbsid_write_direct(new Uint8Array(buffer.slice(0, size)));
-    }
-  } catch (error) {
-    console.error(error);
-    error = true;
-  }
+  clkdrift = 0;
+  ftdi = undefined;
 }
 
-async function usbsid_threadoutput() {
-  if (initialized && allow_play) {
-    var bufferFrame;
-    while (bufferQueue.isNotEmpty()) {
-      bufferFrame = bufferQueue.dequeue();
-      // exit condition
-      if (bufferFrame.bufferIdx < 0) {
-        timer = null;
-        bufferQueue.clear();
-        return;
-      }
-      /* Temporary delay workaround ~ creates possibility to choose for the delay or not */
-      if (async) {
-        await usbsid_write_buffer(bufferFrame.buffer, PACKET_SIZE);
-      } else if (!async) {
-        usbsid_write_buffer(bufferFrame.buffer, PACKET_SIZE);
-      }
-    }
-    /* restart the timer */
-    timer = setTimeout(() => usbsid_threadoutput());
+/** Buffer out queue function */
+function uSoutb(b, flush) {
+  backbuf[backbufIdx++] = b;
+
+  if (backbufIdx < max_buffer_size && flush == 0) return;
+  backbuf[0] = write_cmd | (backbufIdx - 1);
+
+  if (flush < 0)
+    /* indicate exit request */
+    bufferQueue.enqueue({
+      buffer: [...backbuf],
+      bufferIdx: -1,
+    });
+  else {
+    bufferQueue.enqueue({
+      buffer: [...backbuf],
+      bufferIdx: backbufIdx,
+    });
+    backbufIdx = 1;
   }
 }
 
-async function usbsid_write(chip, addr, data) {
-  // var address = calculate_chip_address(chip, addr);
-  // return await usbsid_write_array([(WRITE << 6), address, data])
-
-  backbuf[backbufIdx++] = calculate_chip_address(chip, addr);
-  backbuf[backbufIdx++] = data;
-  if (backbufIdx == MAX_WRITE_BYTES) flush = 1;
-  backbuf[0] = (WRITE << 6) | 0;
-  bufferQueue.enqueue({
-    buffer: [...backbuf],
-    bufferIdx: backbufIdx,
-  });
-  backbufIdx = 1;
+/** Non cycled buffered write function */
+function USBSID_write(chip, addr, data, flush) {
+  uSoutb(calculate_chip_address(chip, addr), 0);
+  uSoutb(data, flush);
 }
 
-async function usbsid_writecycled(cycles, chip, addr, data) {
-  backbuf[backbufIdx++] = calculate_chip_address(chip, addr);;
-  backbuf[backbufIdx++] = data;
+/** Cycled buffered write function */
+function USBSID_clkdwrite(cycles, chip, addr, data) {
+  uSoutb(calculate_chip_address(chip, addr), 0);
+  uSoutb(data, 0);
   let cycles_hi = (cycles >> 8) & 0xff;
   let cycles_lo = cycles & 0xff;
-  backbuf[backbufIdx++] = cycles_hi;
-  backbuf[backbufIdx++] = cycles_lo;
-  if (backbufIdx < MAX_CYCLED_BYTES) return;
-  if (backbufIdx == MAX_CYCLED_BYTES) flush = 1;
-  backbuf[0] = (CYCLED_WRITE << 6) | (backbufIdx - 1);
-  bufferQueue.enqueue({
-    buffer: [...backbuf],
-    bufferIdx: backbufIdx,
-  });
-  backbufIdx = 1;
+  uSoutb(cycles_hi, 0);
+  uSoutb(cycles_lo, backbufIdx == max_buffer_size ? 1 : 0);
 }
 
-async function usbsid_config_write(command, a = 0, b = 0, c = 0, d = 0) {
-  try {
-    return await usbsid_write_array([(COMMAND << 6 | CONFIG), command, a, b, c, d]);
-  } catch (error) {
-    console.error(error);
-    error = true;
+/** Cycled self buffered write function (fastest) */
+async function USBSID_clkdbufwrite(cycles, chip, addr, data) {
+  cbWrDone = 0;
+  cycledbuffer[cbIdx++] = calculate_chip_address(chip, addr);
+  cycledbuffer[cbIdx++] = data;
+  let cycles_hi = (cycles >> 8) & 0xff;
+  let cycles_lo = cycles & 0xff;
+  cycledbuffer[cbIdx++] = cycles_hi;
+  cycledbuffer[cbIdx++] = cycles_lo;
+  cbWrDone = 1;
+
+  if (cbIdx < max_buffer_size) return;
+  cbWrDone = 0;
+  cycledbuffer[0] = (CYCLED_WRITE << 6) | (cbIdx - 1);
+  const result = usbsid.write(new Uint8Array(cycledbuffer.slice(0, cbIdx)));
+  cbIdx = 1;
+  cbWrDone = 1;
+  if (usbsid.async_await) {
+    const r = await Promise.resolve(result);
+    return r;
   }
 }
 
-async function usbsid_setclock(clockrate) {
-  try {
-    return await usbsid_config_write(SET_CLOCK, clockrate);
-  } catch (error) {
-    console.error(error);
-    error = true;
+/** Cycled direct write function ~ slow but functional */
+async function USBSID_cycledwrite(cycles, chip, addr, data) {
+  var writebuffer = new Array(MAX_CYCLED_BYTES);
+  var wbIdx = 1;
+  writebuffer[wbIdx++] = calculate_chip_address(chip, addr);
+  writebuffer[wbIdx++] = data;
+  let cycles_hi = (cycles >> 8) & 0xff;
+  let cycles_lo = cycles & 0xff;
+  writebuffer[wbIdx++] = cycles_hi;
+  writebuffer[wbIdx++] = cycles_lo;
+  writebuffer[0] = (CYCLED_WRITE << 6) | (backbufIdx - 1);
+  wbIdx = 1;
+  const result = usbsid.write(new Uint8Array(writebuffer.slice(0, MAX_CYCLED_BYTES)));
+  if (usbsid.async_await) {
+    const r = await Promise.resolve(result);
+    return r;
   }
 }
 
+/** ----- Util functions ----- */
 
-/* Control functions */
-
-async function usbsid_pause() {
-  allow_play = false;
-  bufferQueue.clear();
-  usbsid.controlTransferOut({
-    requestType: "class",
-    recipient: "device",
-    request: WEBUSB_COMMAND,
-    value: PAUSE,
-    index: usbsid.interfaceNumber,
-  });
+/** Command write function */
+function USBSID_cmdwrite(command) {
+  try {
+    uSwrite([(COMMAND << 6) | command], 3);
+  } catch (err) {
+    console.error(err);
+  }
 }
 
-async function usbsid_continue() {
-  allow_play = true;
-  bufferQueue.clear();
-  usbsid.controlTransferOut({
-    requestType: "class",
-    recipient: "device",
-    request: WEBUSB_COMMAND,
-    value: WEBUSB_CONTINUE,
-    index: usbsid.interfaceNumber,
-  });
+/** Config write function */
+function USBSID_configwrite(command, a = 0, b = 0, c = 0, d = 0, e = 0) {
+  try {
+    uSwrite([(COMMAND << 6) | CONFIG, command, a, b, c, d, e], 6);
+  } catch (err) {
+    console.error(err);
+  }
 }
 
-async function usbsid_reset() {
-  allow_play = false;
-  bufferQueue.clear();
-
-  usbsid.controlTransferOut({
-    requestType: "class",
-    recipient: "device",
-    request: WEBUSB_COMMAND,
-    value: WEBUSB_RESET,  /* (unmutes aswell) */
-    index: usbsid.interfaceNumber,
-  });
-
-  delay(250);
-  backbufIdx = 1;
-  allow_play = true;
+/** Internal close function */
+async function USBSID_close() {
+  await usbsid.close();
 }
 
-async function usbsid_is_playing() {
+/** Returns true or false if playing */
+function USBSID_is_playing() {
   return bufferQueue.isNotEmpty();
 }
 
+/** Reset function */
+function USBSID_reset(volume) {
+  try {
+    bufferQueue.clear();
+    USBSID_cmdwrite(RESET_SID);
+    /* sleep for 50us */
+    us_delay(50); /* wait for reset to complete */
 
-/* Helper functions */
+    USBSID_write(0, 0x18, volume, 1);
+    USBSID_write(1, 0x18, volume, 1);
+    USBSID_write(3, 0x18, volume, 1);
+    USBSID_write(4, 0x18, volume, 1);
+
+    clkdrift = 0;
+    us_delay(250); /* wait for send/receive to complete */
+
+    backbufIdx = 1;
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+/** Set USBSID clockrate */
+function USBSID_setclock(clockrate) {
+  try {
+    USBSID_configwrite(SET_CLOCK, clockrate);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+/** Pause USBSID */
+function USBSID_pause() {
+  try {
+    USBSID_cmdwrite(PAUSE);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+/** Set Mono/Stereo */
+function USBSID_setaudio(stereo) {
+  try {
+    USBSID_configwrite(SET_AUDIO, stereo);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+/** Toggle Mono/Stereo */
+function USBSID_toggleaudio() {
+  try {
+    USBSID_configwrite(TOGGLE_AUDIO);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+/** ----- Helper functions ----- **/
 
 function jsidplay2_chip_address(chip, addr) {
   /* chip can be one of:
@@ -440,37 +500,36 @@ function jsidplay2_chip_address(chip, addr) {
      s 0x73 115 01110011 => 2?
   */
   /* Nasty workaround for getting the correct chipno! */
-  addr = chip == 'a'
-    ? ((0 * 0x20) | addr)
-    : chip == 'I'
-    ? ((1 * 0x20) | addr)
-    : chip == ' '
-    ? ((1 * 0x20) | addr)
-    : chip == 's'
-    ? ((2 * 0x20) | addr)
-    : chip == '-'
-    ? ((2 * 0x20) | addr)
-    : ((0 * 0x20) | addr);
+  addr =
+    chip == "a"
+      ? (0 * 0x20) | addr
+      : chip == "I"
+      ? (1 * 0x20) | addr
+      : chip == " "
+      ? (1 * 0x20) | addr
+      : chip == "s"
+      ? (2 * 0x20) | addr
+      : chip == "-"
+      ? (2 * 0x20) | addr
+      : (0 * 0x20) | addr;
   return addr;
 }
 
 function default_chip_address(chip, addr) {
-  return ((chip * 0x20) | addr);
+  return (chip * 0x20) | addr;
 }
 
 function calculate_chip_address(chip, addr) {
   switch (PLAYER) {
-    case 'jsidplay2':
+    case "jsidplay2":
       return jsidplay2_chip_address(chip, addr);
     default:
       return default_chip_address(chip, addr);
   }
 }
 
-
-/* The actual queue here ladies and gentle peoples */
-
-function usbsid_queue() {
+/** The actual queue here peoples */
+function USBSID_queue() {
   var head, tail;
   return Object.freeze({
     enqueue(value) {
