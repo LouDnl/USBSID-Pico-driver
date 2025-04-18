@@ -88,6 +88,9 @@ extern "C"
   int getpcbversion_USBSID(USBSIDitf p) {
     return ((USBSID_Class*)p)->USBSID_GetPCBVersion();
   };
+  void setstereo_USBSID(USBSIDitf p, int state) {
+    return ((USBSID_Class*)p)->USBSID_SetStereo(state);
+  };
   void togglestereo_USBSID(USBSIDitf p) {
     return ((USBSID_Class*)p)->USBSID_ToggleStereo();
   };

@@ -52,6 +52,7 @@ extern "C" {
   int getnumsids_USBSID(USBSIDitf);
   int getfmoplsid_USBSID(USBSIDitf);
   int getpcbversion_USBSID(USBSIDitf);
+  void setstereo_USBSID(USBSIDitf, int state);
   void togglestereo_USBSID(USBSIDitf);
 
   /* Helpers */

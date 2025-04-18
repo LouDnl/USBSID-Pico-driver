@@ -320,6 +320,7 @@ namespace USBSID_NS
       int USBSID_GetNumSIDs(void);                     /* Get the number of sids configured */
       int USBSID_GetFMOplSID(void);                    /* Get the sid number (if configured) to address FMOpl */
       int USBSID_GetPCBVersion(void);                  /* Get the PCB version */
+      void USBSID_SetStereo(int state);                /* Set device to mono or stereo ~ v1.3 PCB only */
       void USBSID_ToggleStereo(void);                  /* Toggle between mono and stereo ~ v1.3 PCB only */
 
       /* Synchronous direct */
