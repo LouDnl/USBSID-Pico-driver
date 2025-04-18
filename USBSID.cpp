@@ -78,7 +78,7 @@ USBSID_Class::USBSID_Class() :
   us_Initialised = true;
 }
 
-SBSID_Class::~USBSID_Class()
+USBSID_Class::~USBSID_Class()
 {
   USBDBG(stdout, "[USBSID] Driver de-init start\n");
   if (us_PortIsOpen)
