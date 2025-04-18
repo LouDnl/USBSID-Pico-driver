@@ -235,6 +235,7 @@ namespace USBSID_NS
   static long us_clkrate = 0;
   static int numsids = 0;
   static int fmoplsid = -1;
+  static int pcbversion = -1;
 
   /* Timing related */
   typedef std::nano                                      ratio_t;      /* 1000000000 */
@@ -317,7 +318,8 @@ namespace USBSID_NS
       long USBSID_GetRefreshRate(void);                /* Get cycles per refresh rate */
       long USBSID_GetRasterRate(void);                 /* Get cycles per raster rate */
       int USBSID_GetNumSIDs(void);                     /* Get the number of sids configured */
-      int USBSID_GetFMOplSID(void);                       /* Get the sid number (if configured) to address FMOpl */
+      int USBSID_GetFMOplSID(void);                    /* Get the sid number (if configured) to address FMOpl */
+      int USBSID_GetPCBVersion(void);                  /* Get the PCB version */
 
       /* Synchronous direct */
       void USBSID_SingleWrite(unsigned char *buff, size_t len);                /* Single write buffer of size_t ~ example: config writing */

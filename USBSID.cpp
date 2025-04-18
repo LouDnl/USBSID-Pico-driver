@@ -267,6 +267,16 @@ int USBSID_Class::USBSID_GetFMOplSID(void)
   return (fmoplsid == 0 ? -1 : fmoplsid);
 }
 
+int USBSID_Class::USBSID_GetPCBVersion(void)
+{
+  if (pcbversion == -1) {
+    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x81, 0x1, 0, 0, 0};
+    USBSID_SingleWrite(configbuff, 6);
+    pcbversion = USBSID_SingleReadConfig(result, 1);
+  }
+  return pcbversion;
+}
+
 /* SYNCHRONOUS */
 
 void USBSID_Class::USBSID_SingleWrite(unsigned char *buff, size_t len)
