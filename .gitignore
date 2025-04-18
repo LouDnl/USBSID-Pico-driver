@@ -19,8 +19,8 @@
 !javax.usb.properties
 
 # Not these directories and their contents
-!java
-!java/**
+!java/usbsid-usb-driver-library-java/
+!java/usbsid-usb-driver-library-java/src/main/
 !vice-makefile
 !vice-makefile/*
 !webusb
