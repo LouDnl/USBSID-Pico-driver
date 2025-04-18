@@ -277,6 +277,19 @@ int USBSID_Class::USBSID_GetPCBVersion(void)
   return pcbversion;
 }
 
+void USBSID_Class::USBSID_ToggleStereo(void)
+{
+  if (pcbversion == -1) {
+    USBSID_GetPCBVersion();
+  }
+  if (pcbversion == 13) {
+    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x88, 0x0, 0, 0, 0};
+    USBSID_SingleWrite(configbuff, 6);
+  }
+  return;
+}
+
+
 /* SYNCHRONOUS */
 
 void USBSID_Class::USBSID_SingleWrite(unsigned char *buff, size_t len)
