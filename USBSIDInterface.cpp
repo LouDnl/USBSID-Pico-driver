@@ -82,6 +82,15 @@ extern "C"
   int getnumsids_USBSID(USBSIDitf p){
     return ((USBSID_Class*)p)->USBSID_GetNumSIDs();
   }
+  int getfmoplsid_USBSID(USBSIDitf p) {
+    return ((USBSID_Class*)p)->USBSID_GetFMOplSID();
+  };
+  int getpcbversion_USBSID(USBSIDitf p) {
+    return ((USBSID_Class*)p)->USBSID_GetPCBVersion();
+  };
+  void togglestereo_USBSID(USBSIDitf p) {
+    return ((USBSID_Class*)p)->USBSID_ToggleStereo();
+  };
   bool available_USBSID(USBSIDitf p) {
     return ((USBSID_Class*)p)->us_Available;
   }

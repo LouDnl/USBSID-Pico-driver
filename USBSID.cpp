@@ -865,30 +865,30 @@ void USBSID_Class::LIBUSB_CloseDevice(void)
 
 int USBSID_Class::LIBUSB_Available(libusb_context *ctx, uint16_t vendor_id, uint16_t product_id)
 {
-	struct libusb_device **devs;
-	struct libusb_device *dev;
-	size_t i = 0;
-	int r;
+  struct libusb_device **devs;
+  struct libusb_device *dev;
+  size_t i = 0;
+  int r;
   us_Available = false;
   us_Found = 0;
 
-	if (libusb_get_device_list(ctx, &devs) < 0)
-		return 0;
+  if (libusb_get_device_list(ctx, &devs) < 0)
+    return 0;
 
-	while ((dev = devs[i++]) != NULL) {
-		struct libusb_device_descriptor desc;
-		r = libusb_get_device_descriptor(dev, &desc);
-		if (r < 0)
-			goto out;
-		if (desc.idVendor == vendor_id && desc.idProduct == product_id) {
-			us_Available = true;
+  while ((dev = devs[i++]) != NULL) {
+    struct libusb_device_descriptor desc;
+    r = libusb_get_device_descriptor(dev, &desc);
+    if (r < 0)
+      goto out;
+    if (desc.idVendor == vendor_id && desc.idProduct == product_id) {
+      us_Available = true;
       us_Found++;
-			continue;
-		}
-	}
+      continue;
+    }
+  }
 out:
-	libusb_free_device_list(devs, 1);
-	return (us_Available ? us_Found : 0);
+  libusb_free_device_list(devs, 1);
+  return (us_Available ? us_Found : 0);
 }
 
 int USBSID_Class::LIBUSB_DetachKernelDriver(void)

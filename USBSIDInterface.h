@@ -50,7 +50,9 @@ extern "C" {
   long getrefreshrate_USBSID(USBSIDitf);
   long getrasterrate_USBSID(USBSIDitf);
   int getnumsids_USBSID(USBSIDitf);
-  /* TODO: Add all remaining namespace functions */
+  int getfmoplsid_USBSID(USBSIDitf);
+  int getpcbversion_USBSID(USBSIDitf);
+  void togglestereo_USBSID(USBSIDitf);
 
   /* Helpers */
   bool available_USBSID(USBSIDitf);
