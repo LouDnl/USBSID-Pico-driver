@@ -78,10 +78,11 @@ USBSID_Class::USBSID_Class() :
   us_Initialised = true;
 }
 
-USBSID_Class::~USBSID_Class()
+SBSID_Class::~USBSID_Class()
 {
   USBDBG(stdout, "[USBSID] Driver de-init start\n");
-  if (USBSID_Close() == 0) us_Initialised = false;
+  if (us_PortIsOpen)
+    if (USBSID_Close() == 0) us_Initialised = false;
   if (write_buffer) us_free(write_buffer);
   if (thread_buffer) us_free(thread_buffer);
   if (result) us_free(result);
@@ -122,7 +123,7 @@ int USBSID_Class::USBSID_Close(void)
   if (rc != -1) USBERR(stderr, "Expected rc == -1, received: %d\n", rc);
   if (e != 0) USBERR(stderr, "Expected e == 0, received: %d\n", e);
   if (devh != NULL) USBERR(stderr, "Expected dev == NULL, received: %p", (void*)&devh);
-  us_PortIsOpen = false;
+  if (us_PortIsOpen) us_PortIsOpen = false;
   USBDBG(stdout, "[USBSID] De-init finished\n");
   return 0;
 }
