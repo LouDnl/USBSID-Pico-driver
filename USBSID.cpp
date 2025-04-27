@@ -516,8 +516,8 @@ void* USBSID_Class::USBSID_Thread(void)
     }
   }
   USBDBG(stdout, "[USBSID] Thread finished\r\n");
-  us_thread--;
   pthread_mutex_unlock(&us_mutex);
+  us_thread--;
   pthread_exit(NULL);
   return NULL;
 }
