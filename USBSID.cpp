@@ -245,6 +245,27 @@ long USBSID_Class::USBSID_GetRasterRate(void)
   return cycles_per_raster;
 }
 
+int USBSID_Class::USBSID_GetSocketConfig(void)
+{
+  if (socketconfig == -1) {
+    socketconfig = 1;
+    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x37, 0, 0, 0, 0};
+    USBSID_SingleWrite(configbuff, 6);
+    USBSID_SingleReadConfig(result, 64);
+    if(result[0] == 0x37) {
+      memcpy(us_SocketConfig, result, 10);
+      socketconfig = -1;
+      return 1;
+    } else {
+      socketconfig = -1;
+      return 0;
+    }
+  } else {
+    socketconfig = -1;
+    return 0;
+  }
+}
+
 int USBSID_Class::USBSID_GetNumSIDs(void)
 {
   if (numsids == 0) {

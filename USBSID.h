@@ -236,6 +236,7 @@ namespace USBSID_NS
   static int numsids = 0;
   static int fmoplsid = -1;
   static int pcbversion = -1;
+  static int socketconfig = -1;
 
   /* Timing related */
   typedef std::nano                                      ratio_t;      /* 1000000000 */
@@ -297,6 +298,7 @@ namespace USBSID_NS
       bool us_Initialised;
       bool us_PortIsOpen;
       int us_Found;
+      uint8_t * us_SocketConfig[10];
       #ifdef DEBUG_USBSID_MEMORY
       bool us_DebugMemory = false;
       #endif
@@ -317,6 +319,7 @@ namespace USBSID_NS
       long USBSID_GetClockRate(void);                  /* Get CPU clockrate in Hertz  */
       long USBSID_GetRefreshRate(void);                /* Get cycles per refresh rate */
       long USBSID_GetRasterRate(void);                 /* Get cycles per raster rate */
+      int USBSID_GetSocketConfig(void);                /* Get socket config and read it into us_SocketConfig, returns 1 if succesful */
       int USBSID_GetNumSIDs(void);                     /* Get the number of sids configured */
       int USBSID_GetFMOplSID(void);                    /* Get the sid number (if configured) to address FMOpl */
       int USBSID_GetPCBVersion(void);                  /* Get the PCB version */
