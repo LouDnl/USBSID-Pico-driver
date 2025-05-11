@@ -245,26 +245,119 @@ long USBSID_Class::USBSID_GetRasterRate(void)
   return cycles_per_raster;
 }
 
-int USBSID_Class::USBSID_GetSocketConfig(void)
+/* Socket config array
+ * 0 = Initiator
+ * 1 = Verification
+ * 2 HiByte = socketOne enabled
+ * 2 LoByte = socketOne dualsid
+ * 3 HiByte = socketOne chipType
+ * 3 LoByte = socketOne cloneType
+ * 4 HiByte = socketOne sid1Type
+ * 4 LoByte = socketOne sid2Type
+ * 5 HiByte = socketTwo enabled
+ * 5 LoByte = socketTwo dualsid
+ * 6 HiByte = socketTwo chipType
+ * 6 LoByte = socketTwo cloneType
+ * 7 HiByte = socketTwo sid1Type
+ * 7 LoByte = socketTwo sid2Type
+ * 8 = socketTwo mirror socketOne
+ * 9 = Terminator
+ */
+uint8_t* USBSID_Class::USBSID_GetSocketConfig(uint8_t socket_config[])
 {
   if (socketconfig == -1) {
     socketconfig = 1;
     uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x37, 0, 0, 0, 0};
     USBSID_SingleWrite(configbuff, 6);
-    USBSID_SingleReadConfig(result, 64);
-    if(result[0] == 0x37) {
-      memcpy(us_SocketConfig, result, 10);
-      socketconfig = -1;
-      return 1;
+    uint8_t socket_buff[10];
+    USBSID_SingleReadConfig(socket_buff, 10);
+    if (socket_buff[0] == 0x37
+      && socket_buff[1] == 0x7F
+      && socket_buff[9] == 0xFF) {
+      memcpy(socket_config, socket_buff, 10);
+      return socket_config;
     } else {
       socketconfig = -1;
-      return 0;
+      return NULL;
     }
   } else {
-    socketconfig = -1;
-    return 0;
+    socketconfig = (socketconfig == 1 ? socketconfig : -1);
+    return NULL;
   }
 }
+
+int USBSID_Class::USBSID_GetSocketNumSIDS(int socket, uint8_t socket_config[])
+{
+  switch (socket) {
+    case 1:
+      if (((socket_config[2] & 0xF0) >> 4) == 1) {
+        return ((socket_config[2] & 0xF) == 1 ? 2 : 1);
+      } else {
+        return 0;
+      }
+      break;
+    case 2:
+      if (((socket_config[5] & 0xF0) >> 4) == 1) {
+        return ((socket_config[5] & 0xF) == 1 ? 2 : 1);
+      } else {
+        return 0;
+      }
+      break;
+    default:
+      return 0;
+  }
+};
+
+int USBSID_Class::USBSID_GetSocketChipType(int socket, uint8_t socket_config[])
+{ /* TODO: FINISH */
+  return 0;
+};
+
+/* 0 = unknown, 1 = N/A, 2 = MOS8085, 3 = MOS6581, 4 = FMopl */
+int USBSID_Class::USBSID_GetSocketSIDType1(int socket, uint8_t socket_config[])
+{
+  switch (socket) {
+    case 1:
+      if (((socket_config[2] & 0xF0) >> 4) == 1) {
+        return ((socket_config[4] & 0xF0) >> 4);
+      } else {
+        return 1;
+      }
+      break;
+    case 2:
+      if (((socket_config[5] & 0xF0) >> 4) == 1) {
+        return ((socket_config[7] & 0xF0) >> 4);
+      } else {
+        return 1;
+      }
+      break;
+    default:
+      return 1;
+  }
+};
+
+/* 0 = unknown, 1 = N/A, 2 = MOS8085, 3 = MOS6581, 4 = FMopl */
+int USBSID_Class::USBSID_GetSocketSIDType2(int socket, uint8_t socket_config[])
+{
+  switch (socket) {
+    case 1:
+      if ((((socket_config[2] & 0xF0) >> 4) == 1) && ((socket_config[2] & 0xF) == 1)) {
+        return ((socket_config[4] & 0xF) >> 4);
+      } else {
+        return 1;
+      }
+      break;
+    case 2:
+      if ((((socket_config[5] & 0xF0) >> 4) == 1) && ((socket_config[5] & 0xF) == 1)) {
+        return (socket_config[7] & 0xF);
+      } else {
+        return 1;
+      }
+      break;
+    default:
+      return 1;
+  }
+};
 
 int USBSID_Class::USBSID_GetNumSIDs(void)
 {

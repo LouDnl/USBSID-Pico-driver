@@ -298,7 +298,6 @@ namespace USBSID_NS
       bool us_Initialised;
       bool us_PortIsOpen;
       int us_Found;
-      uint8_t * us_SocketConfig[10];
       #ifdef DEBUG_USBSID_MEMORY
       bool us_DebugMemory = false;
       #endif
@@ -306,25 +305,29 @@ namespace USBSID_NS
       /* USBSID */
       int USBSID_Init(bool start_threaded, bool with_cycles);
       int USBSID_Close(void);
-      void USBSID_Pause(void);                         /* Pause playing by releasing chipselect pins */
-      void USBSID_Reset(void);                         /* Reset all SID chips */
-      void USBSID_ResetAllRegisters(void);             /* Reset register for all SID chips */
-      void USBSID_Mute(void);                          /* Mute all SID chips */
-      void USBSID_UnMute(void);                        /* UnMute all SID chips */
-      void USBSID_DisableSID(void);                    /* Release reset pin and unmute SID */
-      void USBSID_EnableSID(void);                     /* Assert reset pin and release chipselect pins */
-      void USBSID_ClearBus(void);                      /* Clear the SID bus from any data */
-      void USBSID_SetClockRate(long clockrate_cycles,  /* Set CPU clockrate in Hertz */
-                               bool suspend_sids);     /* Assert SID RES signal while changing clockrate (Advised!)*/
-      long USBSID_GetClockRate(void);                  /* Get CPU clockrate in Hertz  */
-      long USBSID_GetRefreshRate(void);                /* Get cycles per refresh rate */
-      long USBSID_GetRasterRate(void);                 /* Get cycles per raster rate */
-      int USBSID_GetSocketConfig(void);                /* Get socket config and read it into us_SocketConfig, returns 1 if succesful */
-      int USBSID_GetNumSIDs(void);                     /* Get the number of sids configured */
-      int USBSID_GetFMOplSID(void);                    /* Get the sid number (if configured) to address FMOpl */
-      int USBSID_GetPCBVersion(void);                  /* Get the PCB version */
-      void USBSID_SetStereo(int state);                /* Set device to mono or stereo ~ v1.3 PCB only */
-      void USBSID_ToggleStereo(void);                  /* Toggle between mono and stereo ~ v1.3 PCB only */
+      void USBSID_Pause(void);                                            /* Pause playing by releasing chipselect pins */
+      void USBSID_Reset(void);                                            /* Reset all SID chips */
+      void USBSID_ResetAllRegisters(void);                                /* Reset register for all SID chips */
+      void USBSID_Mute(void);                                             /* Mute all SID chips */
+      void USBSID_UnMute(void);                                           /* UnMute all SID chips */
+      void USBSID_DisableSID(void);                                       /* Release reset pin and unmute SID */
+      void USBSID_EnableSID(void);                                        /* Assert reset pin and release chipselect pins */
+      void USBSID_ClearBus(void);                                         /* Clear the SID bus from any data */
+      void USBSID_SetClockRate(long clockrate_cycles,                     /* Set CPU clockrate in Hertz */
+                               bool suspend_sids);                        /* Assert SID RES signal while changing clockrate (Advised!)*/
+      long USBSID_GetClockRate(void);                                     /* Get CPU clockrate in Hertz  */
+      long USBSID_GetRefreshRate(void);                                   /* Get cycles per refresh rate */
+      long USBSID_GetRasterRate(void);                                    /* Get cycles per raster rate */
+      uint8_t* USBSID_GetSocketConfig(uint8_t socket_config[]);           /* Get socket config for parsing */
+      int USBSID_GetSocketNumSIDS(int socket, uint8_t socket_config[]);   /* Get the socket number of sids configured */
+      int USBSID_GetSocketChipType(int socket, uint8_t socket_config[]);  /* Get the socket chip type configured */
+      int USBSID_GetSocketSIDType1(int socket, uint8_t socket_config[]);  /* Get the socket SID 1 type configured */
+      int USBSID_GetSocketSIDType2(int socket, uint8_t socket_config[]);  /* Get the socket SID 2 type configured (only works for clone chip types ofcourse) */
+      int USBSID_GetNumSIDs(void);                                        /* Get the total number of sids configured */
+      int USBSID_GetFMOplSID(void);                                       /* Get the sid number (if configured) to address FMOpl */
+      int USBSID_GetPCBVersion(void);                                     /* Get the PCB version */
+      void USBSID_SetStereo(int state);                                   /* Set device to mono or stereo ~ v1.3 PCB only */
+      void USBSID_ToggleStereo(void);                                     /* Toggle between mono and stereo ~ v1.3 PCB only */
 
       /* Synchronous direct */
       void USBSID_SingleWrite(unsigned char *buff, size_t len);                /* Single write buffer of size_t ~ example: config writing */
