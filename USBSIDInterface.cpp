@@ -126,9 +126,9 @@ extern "C"
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_WriteCycled(reg, val, cycles);
   };
-  unsigned char read_USBSID(USBSIDitf p, unsigned char *writebuff){
+  unsigned char read_USBSID(USBSIDitf p, uint8_t reg){
     if( p == NULL ) return 0;
-    return ((USBSID_Class*)p)->USBSID_Read(writebuff);
+    return ((USBSID_Class*)p)->USBSID_Read(reg);
   };
   void writering_USBSID(USBSIDitf p, uint8_t reg, uint8_t val){
     if( p == NULL ) return;
@@ -137,6 +137,14 @@ extern "C"
   void writeringcycled_USBSID(USBSIDitf p, uint8_t reg, uint8_t val, uint16_t cycles){
     if( p == NULL ) return;
     return ((USBSID_Class*) p)->USBSID_WriteRingCycled(reg, val, cycles);
+  };
+  void enablethread_USBSID(USBSIDitf p){
+    if( p == NULL ) return;
+    return ((USBSID_Class*) p)->USBSID_EnableThread();
+  };
+  void disablethread_USBSID(USBSIDitf p){
+    if( p == NULL ) return;
+    return ((USBSID_Class*) p)->USBSID_DisableThread();
   };
   void setflush_USBSID(USBSIDitf p){
     if( p == NULL ) return;

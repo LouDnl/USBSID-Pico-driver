@@ -464,8 +464,8 @@ unsigned char USBSID_Class::USBSID_SingleReadConfig(unsigned char *buff, size_t 
 
 void USBSID_Class::USBSID_Write(unsigned char *buff, size_t len)
 {
-  if (len == 3 && (threaded || withcycles)) {
-    USBERR(stderr, "[USBSID] Function '%s' cannot be used with length %ld when threaded (%d) and/or withcycles (%d) are enabled\n", __func__, len, threaded, withcycles);
+  if (len == 3 || threaded) {
+    USBERR(stderr, "[USBSID] Function '%s' cannot be used with length %ld when threaded (%d) is enabled\n", __func__, threaded);
     return;
   }
   write_completed = 0;
@@ -478,7 +478,7 @@ void USBSID_Class::USBSID_Write(unsigned char *buff, size_t len)
 void USBSID_Class::USBSID_Write(uint8_t reg, uint8_t val)
 {
   if (threaded) {
-    USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) and/or withcycles (%d) are enabled\n", __func__, threaded, withcycles);
+    USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) is enabled\n", __func__, threaded);
     return;
   }
   write_completed = 0;
@@ -491,8 +491,8 @@ void USBSID_Class::USBSID_Write(uint8_t reg, uint8_t val)
 
 void USBSID_Class::USBSID_Write(unsigned char *buff, size_t len, uint16_t cycles)
 {
-  if (threaded || withcycles) {
-    USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) and/or withcycles (%d) are enabled\n", __func__, threaded, withcycles);
+  if (threaded) {
+    USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) is enabled\n", __func__, threaded);
     return;
   }
   USBSID_WaitForCycle(cycles);
@@ -506,7 +506,7 @@ void USBSID_Class::USBSID_Write(unsigned char *buff, size_t len, uint16_t cycles
 void USBSID_Class::USBSID_Write(uint8_t reg, uint8_t val, uint16_t cycles)
 {
   if (threaded) {
-    USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) and/or withcycles (%d) are enabled\n", __func__, threaded, withcycles);
+    USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) is enabled\n", __func__, threaded);
     return;
   }
   USBSID_WaitForCycle(cycles);
@@ -534,9 +534,28 @@ void USBSID_Class::USBSID_WriteCycled(uint8_t reg, uint8_t val, uint16_t cycles)
   return;
 }
 
+unsigned char USBSID_Class::USBSID_Read(uint8_t reg)
+{
+  if (threaded == 0) {  /* Reading not supported with threaded writes */
+    read_completed = write_completed = 0;
+    uint8_t rw_buff[2];
+    rw_buff[0] = (READ << 6);
+    rw_buff[1] = reg;
+    memcpy(out_buffer, rw_buff, 2);
+    libusb_submit_transfer(transfer_out);
+    libusb_handle_events_completed(ctx, NULL);
+    libusb_submit_transfer(transfer_in);
+    libusb_handle_events_completed(ctx, &read_completed);
+    return *result;
+  } else {
+    USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) is enabled\n", __func__, threaded);
+  }
+  return 0xFF;
+}
+
 unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff)
 {
-  if (threaded == 0 && withcycles == 0) {  /* Reading not supported with threaded writes */
+  if (threaded == 0) {  /* Reading not supported with threaded writes */
     read_completed = write_completed = 0;
     writebuff[0] = (READ << 6);
     memcpy(out_buffer, writebuff, 3);
@@ -545,6 +564,8 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff)
     libusb_submit_transfer(transfer_in);
     libusb_handle_events_completed(ctx, &read_completed);
     return *result;
+  } else {
+    USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) is enabled\n", __func__, threaded);
   }
   return 0xFF;
 }
@@ -561,6 +582,8 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff, uint16_t cycle
     libusb_submit_transfer(transfer_in);
     libusb_handle_events_completed(ctx, &read_completed);
     return *result;
+  } else {
+    USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) is enabled\n", __func__, threaded);
   }
   return 0xFF;
 }
@@ -697,6 +720,19 @@ void USBSID_Class::USBSID_RestartThread(bool with_cycles)
   return;
 }
 
+void USBSID_Class::USBSID_EnableThread(void)
+{
+  USBDBG(stdout, "[USBSID] Enable thread (%d)\r\n", USBSID_IsRunning());
+  if (USBSID_IsRunning() != 1) {
+    USBSID_InitThread();
+  }
+}
+
+void USBSID_Class::USBSID_DisableThread(void)
+{
+  USBDBG(stdout, "[USBSID] Disable thread (%d)\r\n", USBSID_IsRunning());
+  USBSID_StopThread();
+}
 
 /* RINGBUFFER FOR THREADED WRITES */
 

@@ -340,6 +340,7 @@ namespace USBSID_NS
       void USBSID_Write(unsigned char *buff, size_t len, uint16_t cycles);   /* Wait n cycles, write buffer of size_t len */
       void USBSID_Write(uint8_t reg, uint8_t val, uint16_t cycles);          /* Wait n cycles, write register and value */
       void USBSID_WriteCycled(uint8_t reg, uint8_t val, uint16_t cycles);    /* Write register and value, USBSID uses cycles for delay */
+      unsigned char USBSID_Read(uint8_t reg);                                /* Write register, return result */
       unsigned char USBSID_Read(unsigned char *writebuff);                   /* Write buffer, return result */
       unsigned char USBSID_Read(unsigned char *writebuff, uint16_t cycles);  /* Wait for n cycles and write buffer, return result */
 
@@ -348,8 +349,10 @@ namespace USBSID_NS
       void USBSID_WriteRingCycled(uint8_t reg, uint8_t val, uint16_t cycles);  /* Write register, value, and cycles to ringbuffer */
 
       /* Thread buffer */
-      void USBSID_SetFlush(void);  /* Set flush buffer flag to 1 */
-      void USBSID_Flush(void);     /* Set flush buffer flag to 1 and flushes the buffer */
+      void USBSID_EnableThread(void);   /* Enable the thread on the fly */
+      void USBSID_DisableThread(void);  /* Disable the running thread and switch to non threaded and cycled on the fly */
+      void USBSID_SetFlush(void);       /* Set flush buffer flag to 1 */
+      void USBSID_Flush(void);          /* Set flush buffer flag to 1 and flushes the buffer */
 
       /* Thread utils */
       void USBSID_RestartThread(bool with_cycles);

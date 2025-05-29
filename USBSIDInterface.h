@@ -69,13 +69,15 @@ extern "C" {
   void writebuffer_USBSID(USBSIDitf, unsigned char *buff, size_t len);
   void write_USBSID(USBSIDitf, uint8_t reg, uint8_t val);
   void writecycled_USBSID(USBSIDitf, uint8_t reg, uint8_t val, uint16_t cycles);
-  unsigned char read_USBSID(USBSIDitf, unsigned char *writebuff);
+  unsigned char read_USBSID(USBSIDitf p,  uint8_t reg);
 
   /* Asynchronous thread */
   void writering_USBSID(USBSIDitf, uint8_t reg, uint8_t val);
   void writeringcycled_USBSID(USBSIDitf, uint8_t reg, uint8_t val, uint16_t cycles);
 
   /* Thread buffer */
+  void enablethread_USBSID(USBSIDitf);
+  void disablethread_USBSID(USBSIDitf);
   void setflush_USBSID(USBSIDitf);
   void flush_USBSID(USBSIDitf);
 
