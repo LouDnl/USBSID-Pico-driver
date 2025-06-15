@@ -99,20 +99,25 @@ USBSID_Class::~USBSID_Class()
 
 int USBSID_Class::USBSID_Init(bool start_threaded, bool with_cycles)
 {
-  USBDBG(stdout, "[USBSID] Setup start\n");
-  /* Init USB */
-  rc = LIBUSB_Setup(start_threaded, with_cycles);
-  flush_buffer = 0;
-  if (rc >= 0) {
-    /* Start thread on init */
-    if (threaded) {
-      rc = USBSID_InitThread();
+  if (!us_PortIsOpen) {
+    USBDBG(stdout, "[USBSID] Setup start\n");
+    /* Init USB */
+    rc = LIBUSB_Setup(start_threaded, with_cycles);
+    flush_buffer = 0;
+    if (rc >= 0) {
+      /* Start thread on init */
+      if (threaded) {
+        rc = USBSID_InitThread();
+      }
+      us_PortIsOpen = true;
+      return rc;
+    } else {
+      USBDBG(stdout, "[USBSID] Not found\n");
+      return -1;
     }
-    us_PortIsOpen = true;
-    return rc;
   } else {
-    USBDBG(stdout, "[USBSID] Not found\n");
-    return -1;
+    USBDBG(stdout, "[USBSID] Driver already started\n");
+    return 0;
   }
 }
 
