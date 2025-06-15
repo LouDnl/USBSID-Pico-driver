@@ -1,24 +1,12 @@
 package usbsid;
 
-// import java.io.*;
+import java.io.*;
 import java.util.List;
 import java.util.logging.Logger;
 
-// import javax.usb.*;
-// import javax.usb.util.*;
+import javax.usb.*;
+import javax.usb.util.*;
 
-import javax.usb.UsbConfiguration;
-import javax.usb.UsbDevice;
-import javax.usb.UsbDeviceDescriptor;
-import javax.usb.UsbEndpoint;
-import javax.usb.UsbException;
-import javax.usb.UsbHostManager;
-import javax.usb.UsbHub;
-import javax.usb.UsbInterface;
-import javax.usb.UsbInterfacePolicy;
-import javax.usb.UsbPipe;
-import javax.usb.UsbServices;
-// import javax.usb.UsbPort;
 
 public class Device {
 
@@ -27,7 +15,7 @@ public class Device {
   private static byte US_EPOUT = (byte)0x02;
   private static byte US_EPIN = (byte)0x82;
   private static short VENDOR_ID = (short)0xCAFE;
-	private static short PRODUCT_ID = (short)0x4011;
+  private static short PRODUCT_ID = (short)0x4011;
 
   private static boolean us_isOpen = false;
   private static UsbPipe pipe = null;
@@ -36,7 +24,7 @@ public class Device {
   private static UsbInterface iface = null;
   private static UsbEndpoint endpoint = null;
 
-  /* BYTE 0 - top 2 bits */
+/* BYTE 0 - top 2 bits */
   static byte WRITE        =   0;   /*        0b0 ~ 0x00 */
   static byte READ         =   1;   /*        0b1 ~ 0x40 */
   static byte CYCLED_WRITE =   2;   /*       0b10 ~ 0x80 */
@@ -55,6 +43,12 @@ public class Device {
   static byte RESET_MCU    =  19;   /*    0b10011 ~ 0x13 */
   static byte BOOTLOADER   =  20;   /*    0b10100 ~ 0x14 */
 
+  static long DEFAULT = 1000000;  /* 1 MHz     = 1 us */
+  static long PAL     = 985248;   /* 0.985 MHz = 1.014973 us */
+  static long NTSC    = 1022727;  /* 1.023 MHz = 0.977778 us */
+  static long DREAN   = 1023440;  /* 1.023 MHz = 0.977097 us */
+  static long NTSC2   = 1022730;  /* 1.023 MHz = 0.977778 us */
+
   public static boolean isOpen()
   {
     return us_isOpen;
@@ -68,7 +62,7 @@ public class Device {
     if (device == null)
     {
         System.err.println("USBSID-Pico not found");
-        System.exit(1);
+//        System.exit(1);
         return;
     }
     configuration = device.getUsbConfiguration(US_CFG);
@@ -132,11 +126,10 @@ public class Device {
   public static void sendCommand(int command)
     throws UsbException
   {
-
     byte[] message = new byte[3];
     message[0] = (byte) (command); /* config command */
     int sent = pipe.syncSubmit(message);
-    System.out.println(sent + " bytes sent");
+    System.out.println("Command: " + sent + " bytes sent");
   }
 
   public static void sendConfigCommand(
@@ -153,7 +146,7 @@ public class Device {
     message[4] = (byte) (c);
     message[5] = (byte) (d);
     int sent = pipe.syncSubmit(message);
-    System.out.println(sent + " bytes sent");
+    System.out.println("Config command: " + sent + " bytes sent");
   }
 
 }

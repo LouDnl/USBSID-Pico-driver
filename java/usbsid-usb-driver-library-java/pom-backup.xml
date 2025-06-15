@@ -124,8 +124,6 @@
                     <exclude>META-INF/maven/**</exclude>
                     <!--          <exclude>javax/**</exclude>-->
                     <exclude>org/**</exclude>
-                    <exclude>org/usb4java/</exclude>
-                    <exclude>javax/usb/**</exclude>
                   </excludes>
                 </filter>
               </filters>

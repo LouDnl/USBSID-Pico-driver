@@ -24,7 +24,7 @@
 !java
 !java/usbsid-usb-driver-library-java/
 !java/usbsid-usb-driver-library-java/src
-!java/usbsid-usb-driver-library-java/src/*
+!java/usbsid-usb-driver-library-java/src/**
 !java/usbsid-usb-driver-library-java/resources
 !java/usbsid-usb-driver-library-java/resources/javax.usb.properties
 !java/usbsid-usb-driver-library-java/target/

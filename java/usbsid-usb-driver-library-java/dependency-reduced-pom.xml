@@ -27,7 +27,7 @@
         </excludes>
       </resource>
       <resource>
-        <directory>src/resources</directory>
+        <directory>resource</directory>
       </resource>
     </resources>
     <testResources>
@@ -45,7 +45,8 @@
         <version>3.14.0</version>
         <configuration>
           <encoding>${project.build.sourceEncoding}</encoding>
-          <release>17</release>
+          <source>1.8</source>
+          <target>1.8</target>
         </configuration>
       </plugin>
       <plugin>
@@ -76,6 +77,9 @@
                   <artifact>*:*</artifact>
                   <excludes>
                     <exclude>META-INF/maven/**</exclude>
+                    <exclude>org/**</exclude>
+                    <exclude>org/usb4java/</exclude>
+                    <exclude>javax/usb/**</exclude>
                   </excludes>
                 </filter>
               </filters>
