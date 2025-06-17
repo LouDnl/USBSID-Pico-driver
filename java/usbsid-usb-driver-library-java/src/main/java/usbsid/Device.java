@@ -7,6 +7,8 @@ import java.util.logging.Logger;
 import javax.usb.*;
 import javax.usb.util.*;
 
+import org.apache.commons.lang3.ObjectUtils.Null;
+
 
 public class Device {
 
@@ -86,8 +88,12 @@ public class Device {
   public static void close_USBSID()
     throws UsbException
   {
-    pipe.close();
-    iface.release();
+    if (pipe != null) pipe.close();
+    try {
+      if (iface.isClaimed()) iface.release();
+    } catch (javax.usb.UsbPlatformException uPE) {
+      System.out.println("Device not found for re-attaching kernel, skipping.");
+    }
   }
 
   public static UsbDevice find_USBSID(UsbHub hub)
@@ -114,22 +120,31 @@ public class Device {
   public static void asyncWrite(byte[] buffer)
     throws UsbException
   {
-    pipe.asyncSubmit(buffer);
+    try {
+      pipe.asyncSubmit(buffer);
+    } catch (javax.usb.UsbDisconnectedException UDE) {
+      System.out.println("USBSID was already disconnected");
+    }
   }
 
   public static void syncWrite(byte[] buffer)
     throws UsbException
   {
+    // System.out.println("Computer says brrrrr...");
     pipe.syncSubmit(buffer);
   }
 
-  public static void sendCommand(int command)
+  public static void sendCommand(byte command)
     throws UsbException
   {
     byte[] message = new byte[3];
-    message[0] = (byte) (command); /* config command */
-    int sent = pipe.syncSubmit(message);
-    System.out.println("Command: " + sent + " bytes sent");
+    message[0] = (byte)((COMMAND << 6) | (command)); /* config command */
+    try {
+      int sent = pipe.syncSubmit(message);
+      System.out.println("Command: " + sent + " bytes sent");
+    } catch (javax.usb.UsbDisconnectedException UDE) {
+      System.out.println("USBSID was already disconnected");
+    }
   }
 
   public static void sendConfigCommand(

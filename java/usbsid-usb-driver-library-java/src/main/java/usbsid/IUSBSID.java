@@ -8,9 +8,9 @@ public interface IUSBSID {
 
   void USBSID_reset(byte volume);
 
-  void USBSID_clkdwrite(long cycles, byte addr, byte data);
+  void USBSID_clkdwrite(byte addr, byte data, long cycles);
 
-  void USBSID_clkdbuffer(long cycles, byte addr, byte data);
+  void USBSID_writeclkdbuffer(byte addr, byte data, long cycles);
 
   void USBSID_setflush();
 

@@ -27,7 +27,7 @@
         </excludes>
       </resource>
       <resource>
-        <directory>resource</directory>
+        <directory>resources</directory>
       </resource>
     </resources>
     <testResources>
