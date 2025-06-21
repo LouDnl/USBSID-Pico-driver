@@ -61,7 +61,7 @@ public class USBSID extends Device implements IUSBSID {
         buffer_pos = 1;
         // System.out.println(thread_buffer);
         asyncWrite(thread_buffer);
-        /* syncWrite(longbuffer); */
+        /* syncWrite(thread_buffer); */
       }
     } catch (UsbException uE) {
       System.err.println("Exception occured: " + uE);
