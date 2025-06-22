@@ -981,7 +981,7 @@ uint_fast64_t USBSID_Class::USBSID_WaitForCycle(uint_fast16_t cycles)
   USBSID_GetClockRate();  /* Make sure we use the right clockrate */
   timestamp_t now = std::chrono::high_resolution_clock::now();
   double dur = cycles * us_CPUcycleDuration;  /* duration in nanoseconds */
-  duration_t duration = (duration_t)(int_fast64_t)dur;
+  duration_t duration = (duration_t)(int_fast64_t)dur; /* equals dur but as chrono nanoseconds */
   auto target_time = m_LastTime + duration;  /* ns to wait since m_LastTime (now + duration for actual wait time) */
   // auto target_time = now + duration;  /* ns to wait since m_LastTime (now + duration for actual wait time) */
   auto target_delta = target_time - now;
