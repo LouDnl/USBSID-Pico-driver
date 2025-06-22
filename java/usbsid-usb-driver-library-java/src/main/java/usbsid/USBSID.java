@@ -13,7 +13,12 @@ public class USBSID extends Device implements IUSBSID {
   private volatile boolean flush_buffer = false;
   private static long cpufrequency = DEFAULT;
 
-  private long last_time = System.nanoTime();
+  private long start_time = System.nanoTime();
+  private long last_time;
+
+  private void timeSync() {
+    last_time = (System.nanoTime() - start_time);
+  }
 
   private void RingBuffer(int size) {
     ring_read = ring_write = 0;
@@ -46,7 +51,7 @@ public class USBSID extends Device implements IUSBSID {
         System.out.printf("[USBSID] Thread started\n");
 				while (run_thread) {
           if ((ring_read != ring_write) || flush_buffer) {
-            if (diff() > 256 || (flush_buffer && !empty()) ) {
+            if (diff() > 64 || (flush_buffer && !empty()) ) {
               if (flush_buffer) {
                 USBSID_flushbuffer();
               } else {
@@ -112,7 +117,7 @@ public class USBSID extends Device implements IUSBSID {
         run_thread = true;
         USBSID_Thread.setDaemon(true);
         USBSID_Thread.start();
-        last_time = System.nanoTime();
+        timeSync();  // last_time = (System.nanoTime() - start_time);
         return 0;
       }
       return -1;
@@ -139,9 +144,9 @@ public class USBSID extends Device implements IUSBSID {
       close_USBSID();
       System.out.printf("USBSID-Pico closed\n");
       return;
-    } catch (UsbException | InterruptedException uE) {
-      System.err.println("[USBSID] Exception occured: " + uE);
-      uE.printStackTrace();
+    } catch (UsbException | InterruptedException | NumberFormatException E) {
+      System.err.println("[USBSID] Exception occured: " + E.getMessage() + E.getCause());
+      E.printStackTrace();
       return;
     }
   }
@@ -157,7 +162,11 @@ public class USBSID extends Device implements IUSBSID {
       // if ((byte)volume == 0) sendCommand(MUTE);
       // if ((byte)volume != 0) sendCommand(UNMUTE);
       flush_buffer = true;
+      /* TODO: FIX FOR CLONE SIDS, NEEDS TO KNOW IF SID IS CLONE SID! */
+      /* sendCommand(RESET_SID, (byte)0x0); */
       sendCommand(RESET_SID, (byte)0x1);
+      /* sendCommand(UNMUTE, (byte)0x0); */
+      timeSync();
     } catch (UsbException uE) {
       System.err.println("[USBSID] Exception occured: " + uE);
       uE.printStackTrace();
@@ -166,7 +175,7 @@ public class USBSID extends Device implements IUSBSID {
   }
 
   @Override
-  public void USBSID_clkdwrite(byte addr, byte data, long cycles)
+  public void USBSID_clkdwrite(byte addr, byte data, short cycles)
   {
     try {
       byte[] writebuffer = new byte[5];
@@ -186,7 +195,7 @@ public class USBSID extends Device implements IUSBSID {
   }
 
   @Override
-  public void USBSID_writeclkdbuffer(byte addr, byte data, long cycles)
+  public void USBSID_writeclkdbuffer(byte addr, byte data, short cycles)
   {
     // cycles -= 1; /* Works for Coma Light 13 tune 4 */
     byte cycles_hi = (byte)((cycles >> 8) & (byte)0xff);
@@ -195,6 +204,7 @@ public class USBSID extends Device implements IUSBSID {
     put(data);
     put(cycles_hi);
     put(cycles_lo);
+    /* System.out.printf("[W]$%02X:%02X %d\n", (addr & 0xFF), (data & 0xFF), (cycles & 0xFFFF)); */
   }
 
   @Override
@@ -224,6 +234,7 @@ public class USBSID extends Device implements IUSBSID {
       System.out.printf("[USBSID] Clock change: %d\n", freq);
       sendConfigCommand(0x50, freq, 0, 0, 0);
       flush_buffer = true;
+      timeSync();
     } catch (UsbException uE) {
       System.err.println("[USBSID] Exception occured: " + uE);
       uE.printStackTrace();
@@ -236,26 +247,18 @@ public class USBSID extends Device implements IUSBSID {
   public void USBSID_delay(short cycles)
   {
     final long cpu_cycle_in_ns = (long)((float)(1.0 / cpufrequency) * 1000000000);
-    long now = System.nanoTime();
+    long now = (System.nanoTime() - start_time);
     long duration = (cycles * cpu_cycle_in_ns);
     long target_time = (last_time + duration);
     long target_delta = (target_time - now);
-    long delayNs = target_delta;
-    // short minCycles = (short)(((delayNs < 0) ? (delayNs / cpu_cycle_in_ns) : 0) & 0xFFFF);
 
-    // System.out.printf("[MC]%04d [C]%04d [D]%06d [NS]%06d [N]%06d [LT]%06d [TT]%06d [TD]%06d\n",
-    //    minCycles, (cycles & 0xFFFF), duration, delayNs,
-    //    now, last_time, target_time, target_delta);
+    // System.out.printf("[MC]%04d [CYC]%04d [DUR]%06d [NS]%06d [NOW]%06d [LT]%06d [TT]%06d [TD]%06d [CPU]%d\n",
+    //    minCycles, (cycles & 0xFFFF),
+    //    (duration & 0xFFFFFFFFL), delayNs,
+    //    (now & 0xFFFFFFFFL), (last_time & 0xFFFFFFFFL),
+    //    (target_time & 0xFFFFFFFFL), target_delta, cpu_cycle_in_ns);
 
-    if (delayNs > 999999) {
-      do {
-        nsleep(999999);
-        delayNs -= 999999;
-      } while (delayNs > 999999);
-    };
-    if (delayNs > 0) {
-      nsleep(delayNs);
-    };
+    nsleep(target_delta);
     last_time = target_time;
   }
 
@@ -264,6 +267,7 @@ public class USBSID extends Device implements IUSBSID {
     long end = 0;
     do {
       end = System.nanoTime();
+      /* System.out.printf("%d %d %d\n", start, end, delayNs); */
     } while (start + delayNs >= end);
   }
 
