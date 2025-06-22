@@ -212,6 +212,7 @@ public class USBSID extends Device implements IUSBSID {
   {
     try {
       flush_buffer = true;
+      timeSync();
     } catch (Exception E) {
       System.err.println("[USBSID] Exception occured: " + E);
       E.printStackTrace();
