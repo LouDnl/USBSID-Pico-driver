@@ -88,7 +88,7 @@ public class Device {
   public static void close_USBSID()
     throws UsbException
   {
-    sendCommand(RESET_SID);
+    sendCommand(RESET_SID, (byte)0x0);
     if (pipe != null) pipe.close();
     try {
       if (iface.isClaimed()) iface.release();
@@ -135,11 +135,12 @@ public class Device {
     pipe.syncSubmit(buffer);
   }
 
-  public static void sendCommand(byte command)
+  public static void sendCommand(byte command, byte subcommand)
     throws UsbException
   {
     byte[] message = new byte[3];
     message[0] = (byte)((COMMAND << 6) | (command)); /* config command */
+    message[1] = (byte)subcommand;
     try {
       /* int sent =  */pipe.syncSubmit(message);
       // System.out.println("Command: " + sent + " bytes sent");

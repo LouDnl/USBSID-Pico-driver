@@ -157,7 +157,7 @@ public class USBSID extends Device implements IUSBSID {
       // if ((byte)volume == 0) sendCommand(MUTE);
       // if ((byte)volume != 0) sendCommand(UNMUTE);
       flush_buffer = true;
-      sendCommand(RESET_SID);
+      sendCommand(RESET_SID, (byte)0x1);
     } catch (UsbException uE) {
       System.err.println("[USBSID] Exception occured: " + uE);
       uE.printStackTrace();
