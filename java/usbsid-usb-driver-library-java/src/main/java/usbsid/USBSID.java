@@ -1,26 +1,19 @@
 package usbsid;
 
-// import java.io.*;
-// import java.util.List;
-// import java.util.logging.Logger;
-
 import javax.usb.UsbException;
-// import javax.usb.*;
-// import javax.usb.util.*;
 
 public class USBSID extends Device implements IUSBSID {
 
   private volatile boolean run_thread = false;
-  // private byte[] ring_buffer = new byte[256];
-  // private volatile byte ring_read, ring_write;
   private volatile byte[] ring_buffer;
   private volatile int ring_read, ring_write;
-  /* private Object ring_buffMtx = new Object(); */
   private byte[] thread_buffer = new byte[64];
   private byte buffer_pos = 1;
 
   private volatile boolean flush_buffer = false;
   private static long cpufrequency = DEFAULT;
+
+  private long last_time = System.nanoTime();
 
   private void RingBuffer(int size) {
     ring_read = ring_write = 0;
@@ -35,67 +28,70 @@ public class USBSID extends Device implements IUSBSID {
     ring_read = (ring_read + 1) % ring_buffer.length;
     return item;
   }
+  private boolean empty() {
+    return (ring_read == 0 && ring_write == 0);
+  }
   private boolean higher() {
-    return (ring_read > ring_write);
+    return (ring_read < ring_write);
   }
   private int diff() {
-    return (higher() ? (ring_read - ring_write) : (ring_write - ring_read));
+    int d = (higher() ? (ring_read - ring_write) : (ring_write - ring_read));
+    return ((d < 0) ? (d * -1) : d);
   }
 
   private Thread USBSID_Thread = new Thread(new Runnable() {
 		@Override
 		public void run() {
 			try {
-        System.out.println("USBSID thread started");
+        System.out.printf("[USBSID] Thread started\n");
 				while (run_thread) {
-          // if (flush_buffer) { /* BUG: Always true!? */
-            // Do something
-            // flush_buffer = false;
-
-          // }
-          // System.out.println("USBSID_Thread1: ring_read: " + ring_read + " ring_write: " + ring_write);
-          // if (((byte)ring_read & 0xFF) != ((byte)ring_write & 0xFF)) {
-          System.out.printf("\rH:%b D:%04d R:%05d W:%05d", higher(), diff(), ring_read, ring_write);
-          while (ring_read != ring_write) {
-            System.out.printf("\rH:%b D:%04d R:%05d W:%05d", higher(), diff(), ring_read, ring_write);
-            // System.out.println("USBSID_Thread2: ring_read: " + ring_read + " ring_write: " + ring_write);
-            USBSID_fillbuffer();
+          if ((ring_read != ring_write) || flush_buffer) {
+            if (diff() > 256 || (flush_buffer && !empty()) ) {
+              if (flush_buffer) {
+                USBSID_flushbuffer();
+              } else {
+                USBSID_fillbuffer();
+              }
+            }
           }
-          // System.out.println("USBSID_Thread1: ring_read: " + ring_read + " ring_write: " + ring_write);
 				}
-        System.out.println("USBSID thread stopped");
 			} catch (UsbException e) {
-			// } catch (UsbException | InterruptedException e) {
 				e.printStackTrace();
 			}
 		}
 	});
 
+  private void USBSID_flushbuffer() throws UsbException
+  {
+    try {
+      thread_buffer[0] = (byte)((CYCLED_WRITE << 6) | (buffer_pos - 1));
+      asyncWrite(thread_buffer);
+      flush_buffer = false;
+      buffer_pos = 1;
+    } catch (UsbException uE) {
+      System.err.println("[USBSID] Exception occured: " + uE);
+      uE.printStackTrace();
+      throw uE;
+    }
+  }
+
   private void USBSID_fillbuffer() throws UsbException
   {
     try {
-      // thread_buffer[buffer_pos++] = (byte)ring_buffer[(ring_read++ & 0xFF)]; // addr
-      // thread_buffer[buffer_pos++] = (byte)ring_buffer[(ring_read++ & 0xFF)]; // data
-      // thread_buffer[buffer_pos++] = (byte)ring_buffer[(ring_read++ & 0xFF)]; // cycles_hi;
-      // thread_buffer[buffer_pos++] = (byte)ring_buffer[(ring_read++ & 0xFF)]; // cycles_lo;
       thread_buffer[buffer_pos++] = get(); // addr
       thread_buffer[buffer_pos++] = get(); // data
       thread_buffer[buffer_pos++] = get(); // cycles_hi;
       thread_buffer[buffer_pos++] = get(); // cycles_lo;
-      // System.out.println("USBSID_fillbuffer: ring_read: " + (ring_read & 0xFF) + " ring_write: " + (ring_write & 0xFF));
       if (buffer_pos == 61 || flush_buffer) {
         thread_buffer[0] = (byte)((CYCLED_WRITE << 6) | (buffer_pos - 1));
+        asyncWrite(thread_buffer);
         flush_buffer = false;
         buffer_pos = 1;
-        // System.out.println(thread_buffer);
-        asyncWrite(thread_buffer);
-        /* syncWrite(thread_buffer); */
       }
     } catch (UsbException uE) {
-      System.err.println("Exception occured: " + uE);
+      System.err.println("[USBSID] Exception occured: " + uE);
       uE.printStackTrace();
       throw uE;
-      // return;
     }
   }
 
@@ -104,22 +100,24 @@ public class USBSID extends Device implements IUSBSID {
   {
     try {
       if (device != null && isOpen()) {
-        System.err.println("Device is already open!");
+        System.err.printf("[USBSID] Device is already open!\n");
+        flush_buffer = true;
         return -1;
       }
       open_USBSID();
       if (isOpen()) {
-        System.out.println("USBSID-Pico opened");
-        // ring_read = ring_write = 0;
+        System.out.printf("[USBSID] Device opened\n");
+        ring_read = ring_write = 0;
         RingBuffer(65535);
         run_thread = true;
         USBSID_Thread.setDaemon(true);
         USBSID_Thread.start();
+        last_time = System.nanoTime();
         return 0;
       }
       return -1;
     } catch (UsbException uE) {
-      System.err.println("Exception occured: " + uE);
+      System.err.println("[USBSID] Exception occured: " + uE);
       uE.printStackTrace();
       return -1;
     }
@@ -130,20 +128,19 @@ public class USBSID extends Device implements IUSBSID {
   {
     try {
       if (device == null || !isOpen()) {
-        System.err.println("Device is not open!");
+        System.err.printf("Device is not open!\n");
         return;
       }
-      USBSID_Thread.interrupt();
-      // ring_read = ring_write = (byte)(0 & 0xFF);
+      USBSID_flushbuffer();
       ring_read = ring_write = 0;
       run_thread = false;
-      USBSID_reset((byte)0);
       USBSID_Thread.join();
+      System.out.printf("USBSID thread stopped\n");
       close_USBSID();
-      System.out.println("USBSID-Pico closed");
+      System.out.printf("USBSID-Pico closed\n");
       return;
     } catch (UsbException | InterruptedException uE) {
-      System.err.println("Exception occured: " + uE);
+      System.err.println("[USBSID] Exception occured: " + uE);
       uE.printStackTrace();
       return;
     }
@@ -154,15 +151,15 @@ public class USBSID extends Device implements IUSBSID {
   {
     try {
       if (device == null || !isOpen()) {
-        System.err.println("Device is not open!");
+        System.err.printf("[USBSID] Device is not open!\n");
         return;
       }
       // if ((byte)volume == 0) sendCommand(MUTE);
       // if ((byte)volume != 0) sendCommand(UNMUTE);
-
+      flush_buffer = true;
       sendCommand(RESET_SID);
     } catch (UsbException uE) {
-      System.err.println("Exception occured: " + uE);
+      System.err.println("[USBSID] Exception occured: " + uE);
       uE.printStackTrace();
       return;
     }
@@ -182,7 +179,7 @@ public class USBSID extends Device implements IUSBSID {
       writebuffer[4] = (byte)(cycles_lo - 2); // NOTE: TEMPORARY
       asyncWrite(writebuffer);
     } catch (UsbException uE) {
-      System.err.println("Exception occured: " + uE);
+      System.err.println("[USBSID] Exception occured: " + uE);
       uE.printStackTrace();
       return;
     }
@@ -192,22 +189,12 @@ public class USBSID extends Device implements IUSBSID {
   public void USBSID_writeclkdbuffer(byte addr, byte data, long cycles)
   {
     // cycles -= 1; /* Works for Coma Light 13 tune 4 */
-    // if (ring_write > ring_read) {
-    // while((((byte)ring_read & 0xFF) - ((byte)ring_write & 0xFF)) <= 64) { nsleep(1); }
-    // }
-    // System.out.println("W " + ((byte)ring_write & 0xFF) + " R " + ((byte)ring_read & 0xFF));
     byte cycles_hi = (byte)((cycles >> 8) & (byte)0xff);
     byte cycles_lo = (byte)(cycles & (byte)0xff);
-    // ring_buffer[(ring_write++ & 0xFF)] = addr;
-    // ring_buffer[(ring_write++ & 0xFF)] = data;
-    // ring_buffer[(ring_write++ & 0xFF)] = cycles_hi;
-    // ring_buffer[(ring_write++ & 0xFF)] = cycles_lo;
     put(addr);
     put(data);
     put(cycles_hi);
     put(cycles_lo);
-    // drift();
-    // System.out.println("USBSID_writeclkdbuffer: ring_read: " + (ring_read & 0xFF) + " ring_write: " + (ring_write & 0xFF));
   }
 
   @Override
@@ -216,7 +203,7 @@ public class USBSID extends Device implements IUSBSID {
     try {
       flush_buffer = true;
     } catch (Exception E) {
-      System.err.println("Exception occured: " + E);
+      System.err.println("[USBSID] Exception occured: " + E);
       E.printStackTrace();
       return;
     }
@@ -226,39 +213,40 @@ public class USBSID extends Device implements IUSBSID {
   public void USBSID_setclock(double CpuClock)
   {
     try {
-      System.out.println("Clock requested: " + CpuClock);
+      System.out.printf("[USBSID] Clock requested: %f\n", CpuClock);
       cpufrequency = (long)CpuClock;
-      System.out.println("Clock converted: " + cpufrequency);
+      System.out.printf("[USBSID] Clock converted: %d\n", cpufrequency);
       short freq = 0;
       if (cpufrequency == DEFAULT) freq = 0;
       if (cpufrequency == PAL) freq = 1;
       if (cpufrequency == NTSC) freq = 2;
       if (cpufrequency == DREAN) freq = 3;
-      System.out.println("Clock change: " + freq);
+      System.out.printf("[USBSID] Clock change: %d\n", freq);
       sendConfigCommand(0x50, freq, 0, 0, 0);
+      flush_buffer = true;
     } catch (UsbException uE) {
-      System.err.println("Exception occured: " + uE);
+      System.err.println("[USBSID] Exception occured: " + uE);
       uE.printStackTrace();
       return;
     }
   }
 
-  // private void drift() {
-  //   if (diff() < 61) {
-  //     nsleep(61);
-  //   }
-  // }
-
+  // private short minCycles = 0;
   @Override
   public void USBSID_delay(short cycles)
   {
-    // cycles -= 1; /* Works for Coma Light 13 tune 4 */
-    long cpu_cycle_in_ns = (long)((float)(1.0 / cpufrequency) * 1000000000);
-    // int delayNs = (int)((cycles - 4) * cpu_cycle_in_ns);
-    int delayNs = (int)(cycles * cpu_cycle_in_ns);
-    // String callingMethod = new Throwable().fillInStackTrace().getStackTrace()[1].getMethodName();
-    if (cycles < 0) return;
-    // System.out.println("(" + callingMethod + ") Delay cycles: " + cycles + " Delay ns: " + delayNs + " CPU Cycle NS: " + cpu_cycle_in_ns);
+    final long cpu_cycle_in_ns = (long)((float)(1.0 / cpufrequency) * 1000000000);
+    long now = System.nanoTime();
+    long duration = (cycles * cpu_cycle_in_ns);
+    long target_time = (last_time + duration);
+    long target_delta = (target_time - now);
+    long delayNs = target_delta;
+    // short minCycles = (short)(((delayNs < 0) ? (delayNs / cpu_cycle_in_ns) : 0) & 0xFFFF);
+
+    // System.out.printf("[MC]%04d [C]%04d [D]%06d [NS]%06d [N]%06d [LT]%06d [TT]%06d [TD]%06d\n",
+    //    minCycles, (cycles & 0xFFFF), duration, delayNs,
+    //    now, last_time, target_time, target_delta);
+
     if (delayNs > 999999) {
       do {
         nsleep(999999);
@@ -268,25 +256,10 @@ public class USBSID extends Device implements IUSBSID {
     if (delayNs > 0) {
       nsleep(delayNs);
     };
+    last_time = target_time;
   }
 
-  private void nsleep(int delayNs) {
-    // try {
-
-    //   Thread.sleep(0, delayNs);
-    // } catch (java.lang.InterruptedException IE) {
-    //   System.err.println("Exception occured: " + IE);
-    // }
-    long start = System.nanoTime();
-    long end = 0;
-    do {
-      end = System.nanoTime();
-    // } while (start + (delayNs * 0.9) >= end);
-    } while (start + delayNs >= end);
-  }
-
-  private void usleep(int delayUs) {
-    int delayNs = delayUs * 1000;
+  private void nsleep(long delayNs) {
     long start = System.nanoTime();
     long end = 0;
     do {
@@ -294,13 +267,4 @@ public class USBSID extends Device implements IUSBSID {
     } while (start + delayNs >= end);
   }
 
-  // public static void main(String[] argv)
-  //   throws UsbException
-  // {
-  //   USBSID usbsid = new USBSID();
-  //   usbsid.USBSID_init();
-  //   sendConfigCommand(0x59,0,0,0,0);
-  //   sendConfigCommand(0x52,0,0,0,0);
-  //   usbsid.USBSID_exit();
-  // }
 }

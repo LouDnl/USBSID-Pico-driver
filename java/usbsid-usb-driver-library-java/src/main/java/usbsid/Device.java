@@ -63,7 +63,7 @@ public class Device {
         UsbHostManager.getUsbServices().getRootUsbHub());
     if (device == null)
     {
-        System.err.println("USBSID-Pico not found");
+        System.err.printf("USBSID-Pico not found\n");
 //        System.exit(1);
         return;
     }
@@ -88,11 +88,12 @@ public class Device {
   public static void close_USBSID()
     throws UsbException
   {
+    sendCommand(RESET_SID);
     if (pipe != null) pipe.close();
     try {
       if (iface.isClaimed()) iface.release();
     } catch (javax.usb.UsbPlatformException uPE) {
-      System.out.println("Device not found for re-attaching kernel, skipping.");
+      System.out.printf("Device not found for re-attaching kernel, skipping.\n");
     }
   }
 
@@ -123,7 +124,7 @@ public class Device {
     try {
       pipe.asyncSubmit(buffer);
     } catch (javax.usb.UsbDisconnectedException UDE) {
-      System.out.println("USBSID was already disconnected");
+      System.out.printf("USBSID was already disconnected\n");
     }
   }
 
@@ -140,10 +141,10 @@ public class Device {
     byte[] message = new byte[3];
     message[0] = (byte)((COMMAND << 6) | (command)); /* config command */
     try {
-      int sent = pipe.syncSubmit(message);
-      System.out.println("Command: " + sent + " bytes sent");
+      /* int sent =  */pipe.syncSubmit(message);
+      // System.out.println("Command: " + sent + " bytes sent");
     } catch (javax.usb.UsbDisconnectedException UDE) {
-      System.out.println("USBSID was already disconnected");
+      System.out.printf("USBSID was already disconnected\n");
     }
   }
 
@@ -160,8 +161,8 @@ public class Device {
     message[3] = (byte) (b);
     message[4] = (byte) (c);
     message[5] = (byte) (d);
-    int sent = pipe.syncSubmit(message);
-    System.out.println("Config command: " + sent + " bytes sent");
+    /* int sent =  */pipe.syncSubmit(message);
+    // System.out.println("Config command: " + sent + " bytes sent");
   }
 
 }
