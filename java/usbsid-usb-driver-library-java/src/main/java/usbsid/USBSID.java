@@ -45,12 +45,12 @@ public class USBSID extends Device implements IUSBSID {
   }
 
   private Thread USBSID_Thread = new Thread(new Runnable() {
-		@Override
-		public void run() {
-			try {
+    @Override
+    public void run() {
+      try {
         System.out.printf("[USBSID] Thread started\n");
-				while (run_thread) {
-          if ((ring_read != ring_write) || flush_buffer) {
+        while (run_thread) {
+          if ((ring_read != ring_write)) {
             if (diff() > 64 || (flush_buffer && !empty()) ) {
               if (flush_buffer) {
                 USBSID_flushbuffer();
@@ -59,12 +59,12 @@ public class USBSID extends Device implements IUSBSID {
               }
             }
           }
-				}
-			} catch (UsbException e) {
-				e.printStackTrace();
-			}
-		}
-	});
+        }
+      } catch (UsbException e) {
+        e.printStackTrace();
+      }
+    }
+  });
 
   private void USBSID_flushbuffer() throws UsbException
   {
