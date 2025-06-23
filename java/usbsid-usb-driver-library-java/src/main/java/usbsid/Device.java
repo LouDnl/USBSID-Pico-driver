@@ -64,7 +64,7 @@ public class Device {
     if (device == null)
     {
         System.err.printf("USBSID-Pico not found\n");
-//        System.exit(1);
+        // System.exit(1);
         return;
     }
     configuration = device.getUsbConfiguration(US_CFG);
