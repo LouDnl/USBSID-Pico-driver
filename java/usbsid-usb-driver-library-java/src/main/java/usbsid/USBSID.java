@@ -1,8 +1,9 @@
 package usbsid;
 
-import javax.usb.UsbException;
+// import javax.usb.UsbException;
 
-import java.io.ByteArrayOutputStream;
+// import java.io.ByteArrayOutputStream;
+// import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import usbsid.Config.CLK;
@@ -147,6 +148,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
         diff_size = ((ds >= min_ring_diff) ? ds : default_ring_diff);
       }
       RingBuffer(ring_size);
+      System.out.printf("[USBSID] Ring buffer size %d with mininum head->tail distance %d\n", ring_size, diff_size);
       run_thread = true;
       USBSID_Thread.setDaemon(true);
       USBSID_Thread.start();
@@ -155,6 +157,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
     }
     return -1;
   }
+
   @Override
   public int USBSID_init()
   {
@@ -169,11 +172,18 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
   }
 
   @Override
+  public int USBSID_init(String driver, int ringsize, int diffsize)
+  {
+    setdriver_USBSID(driver);
+    return USBSID_init(ringsize, diffsize);
+  }
+
+  @Override
   public void USBSID_exit()
   {
     try {
       if (device == null || !isOpen()) {
-        System.err.printf("Device is not open!\n");
+        System.err.printf("[USBSID] Device is not open!\n");
         return;
       }
       USBSID_setflush();
@@ -287,28 +297,160 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
   }
 
   @Override
-  public void USBSID_setstereo(int stereo)
+  public int USBSID_setstereo(int stereo)
   {
     try {
       sendConfigCommand(Cfg.SET_AUDIO.get(), (byte)stereo);
+      return stereo;
     } catch (Exception E) {
       System.err.println("[USBSID] Unhandled exception occured: " + E);
       E.printStackTrace();
-      return;
     }
+    return -1;
   }
 
   @Override
   public byte[] USBSID_getsocketconfig()
   {
-    byte[] x = new byte[1];
-    return x;
+    byte[] socketcfg = null;
+    try {
+      socketcfg = rwConfigCommand(Cfg.READ_SOCKETCFG.get(), 10);
+    } catch (Exception E) {
+      System.err.println("[USBSID] Unhandled exception occured: " + E);
+      E.printStackTrace();
+    }
+    return socketcfg;
   }
 
   @Override
-  public int USBSID_getsocketsidtype(int socket, int sidno, byte[] socket_config)
+  public int[] USBSID_parsesocketconfig(byte[] socketcfg)
+  { /* TODO: Has no knowledge of pre-defined socket SID id's */
+    assert socketcfg[0] == Cfg.READ_SOCKETCFG.get();
+    assert (byte)socketcfg[1] == (byte)0x7F;
+    assert (byte)socketcfg[9] == (byte)0xFF;
+
+    int socketone_en = (socketcfg[2] >> 4);
+    int socketone_dual = (socketcfg[2] & 0xF);
+    int socketone_chiptype = (socketcfg[3] >> 4);
+    int socketone_clonetype = (socketcfg[3] & 0xF);
+    int socketone_sidone = (socketcfg[4] >> 4);
+    int socketone_sidtwo = (socketcfg[4] & 0xF);
+
+    int sockettwo_en = (socketcfg[5] >> 4);
+    int sockettwo_dual = (socketcfg[5] & 0xF);
+    int sockettwo_chiptype = (socketcfg[6] >> 4);
+    int sockettwo_clonetype = (socketcfg[6] & 0xF);
+    int sockettwo_sidone = (socketcfg[7] >> 4);
+    int sockettwo_sidtwo = (socketcfg[7] & 0xF);
+
+    int mirrored = (socketcfg[8] & 0xF);
+
+    int socketone_numsids = ((socketone_en == 1) ? (socketone_dual == 1) ? 2 : 1 : 0);
+    int sockettwo_numsids = ((sockettwo_en == 1) ? (sockettwo_dual == 1) ? 2 : 1 : 0);
+    int numsids = (socketone_numsids + sockettwo_numsids);
+
+    final int[] parsed = {
+      socketone_en, socketone_dual,
+      socketone_chiptype, socketone_clonetype,
+      socketone_sidone, socketone_sidtwo,
+      sockettwo_en, sockettwo_dual,
+      sockettwo_chiptype, sockettwo_clonetype,
+      sockettwo_sidone, sockettwo_sidtwo,
+      socketone_numsids, sockettwo_numsids,
+      numsids, mirrored,
+    };
+    return parsed;
+  }
+
+  @Override
+  public int USBSID_getsocketsidtype(int socket, int sidno, byte[] socketcfg)
   {
+    assert socketcfg[0] == Cfg.READ_SOCKETCFG.get();
+    assert (byte)socketcfg[1] == (byte)0x7F;
+    assert (byte)socketcfg[9] == (byte)0xFF;
+
+    int socketone_sidone = (socketcfg[4] >> 4);
+    int socketone_sidtwo = (socketcfg[4] & 0xF);
+    int sockettwo_sidone = (socketcfg[7] >> 4);
+    int sockettwo_sidtwo = (socketcfg[7] & 0xF);
+
+    switch (socket) {
+      case 1:
+        return ((sidno == 1) ? socketone_sidone : socketone_sidtwo);
+      case 2:
+        return ((sidno == 1) ? sockettwo_sidone : sockettwo_sidtwo);
+    }
+
     return 0;
+  }
+
+  @Override
+  public int USBSID_sidtypebysidno(int sidno, byte[] socketcfg)
+  { /* TODO: Assumes non re-ordered socket config */
+    final int[] parsedcfg = USBSID_parsesocketconfig(socketcfg);
+    int socketone_en = parsedcfg[0];
+    int socketone_sidone = parsedcfg[4];
+    int socketone_sidtwo = parsedcfg[5];
+    int sockettwo_en = parsedcfg[6];
+    int sockettwo_sidone = parsedcfg[10];
+    int sockettwo_sidtwo = parsedcfg[11];
+    int socketone_numsids = parsedcfg[12];
+    int sockettwo_numsids = parsedcfg[13];
+    int numsids = parsedcfg[14];
+
+
+    int configs[][] = {
+       /* 0 Single one */
+      {socketone_sidone},
+       /* 1 Single two */
+      {sockettwo_sidone},
+      /* 2 Dual (one + two) */
+      {socketone_sidone, sockettwo_sidone},
+      /* 3 Dual one */
+      {socketone_sidone, socketone_sidtwo},
+      /* 4 Dual two */
+      {sockettwo_sidone, sockettwo_sidtwo},
+      /* 5 Tripe one (dual one, single two) */
+      {socketone_sidone, socketone_sidtwo, sockettwo_sidone},
+      /* 6 Tripe two (single one, dual two) */
+      {socketone_sidone, sockettwo_sidone, sockettwo_sidtwo},
+      /* 7 Quad */
+      {socketone_sidone, socketone_sidtwo, sockettwo_sidone, sockettwo_sidtwo},
+    };
+
+    int sidtypes[] = null;
+    switch (numsids) {
+      case 1:
+        sidtypes =
+          ((socketone_en == 1) ? configs[0] : (sockettwo_en == 1) ? configs[1] : null);
+        break;
+      case 2:
+        sidtypes =
+          ((socketone_en == 1 && socketone_numsids == 1)
+              && (sockettwo_en == 1 && sockettwo_numsids == 1)
+            ? configs[2]
+            : (socketone_en == 1 && socketone_numsids == 2)
+            ? configs[3]
+            : (sockettwo_en == 1 && sockettwo_numsids == 2)
+            ? configs[4]
+            : null);
+        break;
+      case 3:
+        sidtypes =
+          ((socketone_en == 1 && socketone_numsids == 2)
+            ? configs[5]
+            : (sockettwo_en == 1 && sockettwo_numsids == 2)
+            ? configs[6]
+            : null);
+        break;
+      case 4:
+        sidtypes = configs[7];
+        break;
+      default:
+        sidtypes = null;
+    };
+
+    return sidtypes[sidno];
   }
 
   @Override
@@ -326,12 +468,14 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
   }
 
   @Override
-  public int USBSID_getpcbversion()
-  { /* TODO: Convert to string */
-    int pcbversion = 10;
+  public String USBSID_getpcbversion()
+  {
+    String pcbversion = "0.0";
     try {
-      byte[] r = rwConfigCommand(Cfg.US_PCB_VERSION.get(), 1);
-      pcbversion = (int)r[0];
+      byte[] result = rwConfigCommand(Cfg.US_PCB_VERSION.get(), 64);
+      int length = (int)result[1];
+      byte[] bytes = Arrays.copyOfRange(result, 2, (2+length));
+      pcbversion = new String(bytes);
     } catch (Exception E) {
       System.err.println("[USBSID] Unhandled exception occured: " + E);
       E.printStackTrace();
@@ -340,16 +484,18 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
   }
 
   @Override
-  public byte[] USBSID_getfwversion()
-  { /* TODO: Convert to string */
-    byte[] result = new byte[64];
+  public String USBSID_getfwversion()
+  {
+    String fwversion = "v0.0.0-ALPHA.19700101";
     try {
-      result = rwConfigCommand(Cfg.USBSID_VERSION.get(), 64);
+      byte[] result = rwConfigCommand(Cfg.USBSID_VERSION.get(), 64);
+      int length = (int)result[1];
+      byte[] bytes = Arrays.copyOfRange(result, 2, (2+length));
+      fwversion = new String(bytes);
     } catch (Exception E) {
       System.err.println("[USBSID] Unhandled exception occured: " + E);
       E.printStackTrace();
     }
-    byte[] fwversion = Arrays.copyOfRange(result, 2, (int)result[1]);
     return fwversion;
   }
 

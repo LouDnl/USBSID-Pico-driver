@@ -4,6 +4,7 @@ public interface IUSBSID {
 
   int USBSID_init(Integer...buffsize);
   int USBSID_init();
+  int USBSID_init(String driver, int ringsize, int diffsize);
 
   void USBSID_exit();
 
@@ -17,17 +18,21 @@ public interface IUSBSID {
 
   void USBSID_setclock(double CpuClock);
 
-  void USBSID_setstereo(int stereo);
+  int USBSID_setstereo(int stereo);
 
   byte[] USBSID_getsocketconfig();
 
-  int USBSID_getsocketsidtype(int socket, int sidno, byte[] socket_config);
+  int[] USBSID_parsesocketconfig(byte[] socketcfg);
+
+  int USBSID_getsocketsidtype(int socket, int sidno, byte[] socketcfg);
+
+  int USBSID_sidtypebysidno(int sidno, byte[] socketcfg);
 
   int USBSID_getnumsids();
 
-  int USBSID_getpcbversion();
+  String USBSID_getpcbversion();
 
-  byte[] USBSID_getfwversion();
+  String USBSID_getfwversion();
 
   void USBSID_delay(short cycles);
 

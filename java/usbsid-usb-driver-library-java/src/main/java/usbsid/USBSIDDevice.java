@@ -1,6 +1,6 @@
 package usbsid;
 
-import java.io.*;
+// import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.util.Arrays;
@@ -15,8 +15,8 @@ import org.usb4java.LibUsb;
 import org.usb4java.Device;
 import org.usb4java.DeviceDescriptor;
 import org.usb4java.DeviceHandle;
-import org.usb4java.Interface;
-import org.usb4java.EndpointDescriptor;
+// import org.usb4java.Interface;
+// import org.usb4java.EndpointDescriptor;
 import org.usb4java.LibUsbException;
 import org.usb4java.Transfer;
 import org.usb4java.TransferCallback;
@@ -31,11 +31,9 @@ import javax.usb.UsbEndpoint;
 import javax.usb.UsbException;
 import javax.usb.UsbHostManager;
 import javax.usb.UsbHub;
-
 // import javax.usb.util.*;
 
-
-import org.apache.commons.lang3.ObjectUtils.Null;
+// import org.apache.commons.lang3.ObjectUtils.Null;
 
 
 public class USBSIDDevice {
@@ -52,6 +50,7 @@ public class USBSIDDevice {
   public static Object device = null;
 
   /* Device variables */
+  public static boolean us_overrideDriver = false;
   private static boolean us_isUSBX = false;
   private static boolean us_isLIBUSB = false;
   private static boolean us_isAvailable = false;
@@ -152,124 +151,76 @@ public class USBSIDDevice {
       }
     }
 
-    private static byte[] syncReadX()
+    private static byte[] syncReadX(byte[] buffer, int len)
       throws UsbException
     {
-      byte[] data = new byte[64];
+      /* Beats me why this is, but hey it works ;) */
+      len *= 2; /* double the size of the read length for 2nd URB package */
+      byte[] data = new byte[len];
       try {
-        /* int received =  */
+        pipe_out.syncSubmit(buffer);
         pipe_in.syncSubmit(data);
-        /* if (received == expected_bytes)  */
       } catch (javax.usb.UsbDisconnectedException UDE) {
         System.out.printf("[USBSID] was already disconnected\n");
       }
-      return data;
+      byte[] b_in = Arrays.copyOfRange(data, 0, (len/2));
+      return b_in;
     }
 
   }
 
-  private class USBL {  /* TODO: FINISH */
+  private class USBL {
 
     /* usb4java.libusb */
-    private static Context ctx_lusb = null;
-    private static DeviceList list_lusb = null;
-    private static Device device_lusb = null;
-    private static DeviceHandle handle_lusb = null;
+    private static Context ctx = null;
+    private static DeviceList devicelist = null;
+    private static Device ldevice = null;
+    private static DeviceHandle devh = null;
     private static Transfer transfer_out = null;
     private static ByteBuffer out_buffer = null;
 
+    private static int len_out_buffer = 64;
+    private static int timeout = 0;
+    private static int LIBUSB_OPTION_LOG_LEVEL = 0;
+    private static int LIBUSB_OPTION_USE_USBDK = 1;
+    private static short ACM_CTRL_DTR = 0x01;
+    private static short ACM_CTRL_RTS = 0x02;
+
     private static boolean kernel_isDetached = false;
+    private static int result = -1;
 
     private static void openLIBUSB()
       throws LibUsbException
     {
-      ctx_lusb = new Context();
-      int result = LibUsb.init(ctx_lusb);
+      ctx = new Context();
+      result = LibUsb.init(ctx);
       if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to initialize libusb.", result);
-      final int LIBUSB_OPTION_LOG_LEVEL = 0;
-      final int LIBUSB_OPTION_USE_USBDK = 1;
-      LibUsb.setOption(ctx_lusb, LIBUSB_OPTION_LOG_LEVEL, 0); /* 4 for max verbose logging */
-      LibUsb.setOption(ctx_lusb, LIBUSB_OPTION_USE_USBDK, 1);
 
-      device_lusb = findLUSBSID(VENDOR_ID, PRODUCT_ID);
-      // System.out.println("DEVICE: " + device_lusb);
-      // System.out.println("us_isAvailable: " + us_isAvailable);
-      if ((device_lusb != null) && us_isAvailable) {
+      LibUsb.setOption(ctx, LIBUSB_OPTION_LOG_LEVEL, 0); /* 4 for max verbose logging */
+      LibUsb.setOption(ctx, LIBUSB_OPTION_USE_USBDK, 1); /* 1 to enable */
+
+      result = findLUSBSID(VENDOR_ID, PRODUCT_ID);
+      if (ldevice == null) {
+        System.err.printf("USBSID-Pico not found\n");
+        return;
+      }
+      if ((ldevice != null) && us_isAvailable) {
         try {
-          handle_lusb = LibUsb.openDeviceWithVidPid(ctx_lusb, VENDOR_ID, PRODUCT_ID);
-          // handle_lusb = new DeviceHandle();
-          // result = LibUsb.open(device_lusb, handle_lusb);
-          // if (result != LibUsb.SUCCESS) throw (new LibUsbException("Unable to open USB device", result));
-          // System.out.println("HANDLE A: " + handle_lusb);
-          // System.out.println("HANDLE E: " + new LibUsbException("Unable to open USB device", result));
+          devh = LibUsb.openDeviceWithVidPid(ctx, VENDOR_ID, PRODUCT_ID);
         } catch (LibUsbException LUE) {
           System.out.println(new LibUsbException("[USBSID] Opening device unsuccessful, trying a different method", result));
         }
       } else {
-        device_lusb = null;
+        device = null;
         us_isAvailable = false;
         return;
       }
-      // if (handle_lusb == null) handle_lusb = LibUsb.openDeviceWithVidPid(ctx_lusb, VENDOR_ID, PRODUCT_ID);
-      // System.out.println("HANDLE: " + handle_lusb);
-      // handle_lusb = new DeviceHandle();
-      // result = LibUsb.open(device_lusb, handle_lusb);
-      // if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to open USB device", result);
 
-      // checkKernel(); /* TODO: Move back to this */
-
-      if (LibUsb.kernelDriverActive(handle_lusb, 0) == 1) {
-        try {
-          result = LibUsb.detachKernelDriver(handle_lusb, 1);
-          if (result != LibUsb.SUCCESS || result != LibUsb.ERROR_NOT_SUPPORTED) throw new LibUsbException("[USBSID] Unable to claim interface", result);
-        } catch (LibUsbException LUE) {
-          System.out.println("[USBSID] Detaching kerneldriver for interface 0 result: " + LUE.getMessage());
-        }
-      }
-      try {
-        result = LibUsb.claimInterface(handle_lusb, 0);
-        if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to claim interface", result);
-      } catch (LibUsbException LUE) {
-        System.out.println("[USBSID] Claiming interface 0 result: " + LUE.getMessage());
-      }
-      if (LibUsb.kernelDriverActive(handle_lusb, 1) == 1) {
-        try {
-          result = LibUsb.detachKernelDriver(handle_lusb, 1);
-          if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to claim interface", result);
-        } catch (LibUsbException LUE) {
-          System.out.println("[USBSID] Detaching kerneldriver for interface 1 result: " + LUE.getMessage());
-        }
-      }
-      try {
-        result = LibUsb.claimInterface(handle_lusb, 1);
-        if ((result != LibUsb.SUCCESS)) throw new LibUsbException("[USBSID] Unable to claim interface", result);
-      } catch (LibUsbException LUE) {
-        System.out.println("[USBSID] Claiming interface 1 result: " + LUE.getMessage());
-      }
-
-      try {
-        short ACM_CTRL_DTR = 0x01;
-        short ACM_CTRL_RTS = 0x02;
-        ByteBuffer buffer = ByteBuffer.allocateDirect(0);
-        result = LibUsb.controlTransfer(handle_lusb, (byte)0x21, (byte)0x22, (short)(ACM_CTRL_DTR | ACM_CTRL_RTS), (short)0, buffer, (long)100);
-        // System.out.println("CONFIG 1: " + result);
-        // ByteBuffer config = ByteBuffer.allocateDirect(7);
-        // config.put(new byte[] { 0x40, 0x54, (byte)0x89, 0x00, 0x00, 0x00, 0x08 });
-        // result = LibUsb.controlTransfer(handle_lusb, (byte)0x21, (byte)0x22, (short)0, (short)0, config, (long)100);
-        // System.out.println("CONFIG 2: " + result);
-      } catch (LibUsbException LUE) {
-        System.out.println("CONFIG ERROR: " + result);
-
-      }
-
+      detachKernelDriver();
+      configureDevice();
       initOutBuffer();
       us_isOpen = true;
-      device = device_lusb;
-
-      // System.out.println("handle_lusb:" + handle_lusb.equals(handle_lusb));
-      // System.out.println("device_lusb:" + device_lusb.equals(device_lusb));
-      // System.out.println("device:" + device.equals(device_lusb));
-
+      device = ldevice;
     }
 
     private static void closeLIBUSB()
@@ -277,63 +228,66 @@ public class USBSIDDevice {
     {
       us_isOpen = false;
       deinitOutBuffer();
-      int result = LibUsb.releaseInterface(handle_lusb, US_ITF);
+      int result = LibUsb.releaseInterface(devh, US_ITF);
       if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to release interface", result);
       if (kernel_isDetached) {
-        attachKernel();
+        releaseInterface();
       }
-      LibUsb.exit(ctx_lusb);
+      LibUsb.exit(ctx);
     }
 
-    private static Device findLUSBSID(short vendorId, short productId)
+    private static int findLUSBSID(short vendorId, short productId)
       throws LibUsbException
     {
-      System.out.printf("FIND %04X %04X\n", (vendorId & 0xFFFF), (productId & 0xFFFF));
-      // Read the USB device list
-      list_lusb = new DeviceList();
-      int result = LibUsb.getDeviceList(ctx_lusb, list_lusb);
-      if (result < 0) throw new LibUsbException("Unable to get device list", result);
+      /* Read the USB device list */
+      devicelist = new DeviceList();
+      int result = LibUsb.getDeviceList(ctx, devicelist);
+      if (result < 0) throw new LibUsbException("[USBSID] Unable to get device list", result);
 
       try
       {
         // Iterate over all devices and scan for the right one
-        for (Device d: list_lusb)
+        for (Device dev: devicelist)
         {
           DeviceDescriptor descriptor = new DeviceDescriptor();
-          result = LibUsb.getDeviceDescriptor(d, descriptor);
-          System.out.printf("%04X %04X\n", (descriptor.idVendor() & 0xFFFF), (descriptor.idProduct() & 0xFFFF));
-          if (result != LibUsb.SUCCESS) throw new LibUsbException("Unable to read device descriptor", result);
+          result = LibUsb.getDeviceDescriptor(dev, descriptor);
+          if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to read device descriptor", result);
           if (descriptor.idVendor() == vendorId && descriptor.idProduct() == productId) {
-            System.out.printf("FOUND %04X %04X\n", (descriptor.idVendor() & 0xFFFF), (descriptor.idProduct() & 0xFFFF));
+            ldevice = dev;
             us_isAvailable = true;
-            return d;
+            return 0;
           }
         }
       }
       finally
       {
-      //   // Ensure the allocated device list is freed
-        LibUsb.freeDeviceList(list_lusb, true);
-        // System.out.println("Poo");
+        /* Ensure the allocated device list is freed */
+        LibUsb.freeDeviceList(devicelist, true);
       }
-      return null;
+      return -1;
+    }
+
+    private static void configureDevice()
+    {
+      try {
+        ByteBuffer buffer = ByteBuffer.allocateDirect(0);
+        result = LibUsb.controlTransfer(devh, (byte)0x21, (byte)0x22, (short)(ACM_CTRL_DTR | ACM_CTRL_RTS), (short)0, buffer, (long)100);
+      } catch (LibUsbException LUE) {
+        System.out.println("CONFIG ERROR: " + result);
+      }
     }
 
     private static void initOutBuffer()
     {
       try {
-        out_buffer = LibUsb.devMemAlloc(handle_lusb, 64);
-        System.out.println("devMemAlloc out_buffer: " + out_buffer);
+        out_buffer = LibUsb.devMemAlloc(devh, len_out_buffer);
         if (out_buffer == null) throw new Exception("[USBSID] LibUsb.devMemAlloc failed", null);
       } catch (Exception e) {
         System.out.println("[USBSID] Unable to use devMemAlloc, allocating default");
-        out_buffer = BufferUtils.allocateByteBuffer(64);
-        System.out.println("BufferUtils out_buffer: " + out_buffer);
+        out_buffer = BufferUtils.allocateByteBuffer(len_out_buffer);
       }
       transfer_out = LibUsb.allocTransfer();
-      System.out.println("transfer_out: " + transfer_out);
-      LibUsb.fillBulkTransfer(transfer_out, handle_lusb, US_EPOUT, out_buffer, usb_out, null, 0);
-      System.out.println("transfer_out: " + transfer_out);
+      LibUsb.fillBulkTransfer(transfer_out, devh, US_EPOUT, out_buffer, usb_out, null, timeout);
     }
 
     private static void deinitOutBuffer()
@@ -341,131 +295,127 @@ public class USBSIDDevice {
       LibUsb.cancelTransfer(transfer_out);
       LibUsb.freeTransfer(transfer_out);
       try {
-        LibUsb.devMemFree(handle_lusb, out_buffer, 64);
+        LibUsb.devMemFree(devh, out_buffer, len_out_buffer);
       } catch (Exception e) {
         System.out.println("[USBSID] Unable to use devMemFree, freeing default");
         out_buffer = null;
       }
     }
 
-    private static void detachKernel(int itf)
+    private static void detachKernelDriver()
     {
-      int result = LibUsb.detachKernelDriver(handle_lusb, itf);
-      if (result != LibUsb.SUCCESS || result != LibUsb.ERROR_NOT_SUPPORTED) throw new LibUsbException("[USBSID] Unable to detach kernel driver", result);
-      System.out.println("DETACH: " + result);
+      for (int itf = 0; itf < 2; itf++) {
+        if (LibUsb.kernelDriverActive(devh, itf) == 1) {
+          try {
+            result = LibUsb.detachKernelDriver(devh, itf);
+            if (result != LibUsb.SUCCESS || result != LibUsb.ERROR_NOT_SUPPORTED) throw new LibUsbException("[USBSID] Unable to claim interface", result);
+          } catch (LibUsbException LUE) {
+            System.out.printf("[USBSID] Detaching kerneldriver for interface %d result: %s\n", itf, LUE.getMessage());
+          }
+        }
+        try {
+          result = LibUsb.claimInterface(devh, itf);
+          if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to claim interface", result);
+        } catch (LibUsbException LUE) {
+          System.out.printf("[USBSID] Claiming interface %d result: %s\n", itf, LUE.getMessage());
+        }
+      }
       kernel_isDetached = true;
     }
 
-    private static void attachKernel()
+    private static void releaseInterface()
     {
-      int result = LibUsb.attachKernelDriver(handle_lusb, US_ITF);
-      if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to re-attach kernel driver", result);
+      for (int itf = 0; itf < 2; itf++) {
+        if (LibUsb.kernelDriverActive(devh, itf) == 1) {
+          try {
+            result = LibUsb.detachKernelDriver(devh, itf);
+            if (result != LibUsb.SUCCESS || result != LibUsb.ERROR_NOT_SUPPORTED) throw new LibUsbException("[USBSID] Unable to claim interface", result);
+          } catch (LibUsbException LUE) {
+            System.out.printf("[USBSID] Detaching kerneldriver for interface %d result: %s\n", itf, LUE.getMessage());
+          }
+        }
+        try {
+          result = LibUsb.releaseInterface(devh, itf);
+          if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to release interface", result);
+        } catch (LibUsbException LUE) {
+          System.out.printf("[USBSID] Release interface %d result: %s\n", itf, LUE.getMessage());
+        }
+      }
       kernel_isDetached = false;
     }
 
-    private static boolean checkKernel()
+    private static void asyncWriteL(byte[] buffer)
     {
-      // Check if kernel driver must be detached
-      boolean cap = LibUsb.hasCapability(LibUsb.CAP_SUPPORTS_DETACH_KERNEL_DRIVER);
-      int result = 0;
       try {
-        result = LibUsb.kernelDriverActive(handle_lusb, 0);
-        detachKernel(0);
-        if (result != LibUsb.SUCCESS || result != LibUsb.ERROR_NOT_SUPPORTED) throw new LibUsbException("[USBSID] Unable to check for active kernel driver", result);
+        out_buffer.put(buffer);
+        int result = LibUsb.submitTransfer(transfer_out);
+        LibUsb.handleEventsCompleted(ctx, null);
+        if (result != LibUsb.SUCCESS) System.err.println(new LibUsbException("[USBSID] Transfer failed", result));
       } catch (LibUsbException LUE) {
-        System.out.println(cap + " " + result);
+        throw new LibUsbException(LUE.getMessage(), LUE.getErrorCode());
+      } finally {
+        out_buffer.position(0);
       }
+    }
+
+    private static void syncWriteL(byte[] buffer)
+      throws LibUsbException
+    {
       try {
-        result = LibUsb.kernelDriverActive(handle_lusb, 1);
-        detachKernel(1);
-        if (result != LibUsb.SUCCESS || result != LibUsb.ERROR_NOT_SUPPORTED) throw new LibUsbException("[USBSID] Unable to check for active kernel driver", result);
+        ByteBuffer b = ByteBuffer.allocateDirect(buffer.length);
+        b.put(buffer);
+        IntBuffer transfered = IntBuffer.allocate(1);
+        result = LibUsb.bulkTransfer(devh, US_EPOUT, b, transfered, timeout);
+        if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Transfer failed", result);
+        result = LibUsb.handleEventsTimeout(null, timeout);
+        if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to handle events", result);
       } catch (LibUsbException LUE) {
-        System.out.println(cap + " " + result);
+        throw new LibUsbException(LUE.getMessage(), LUE.getErrorCode());
       }
-      boolean check = (cap && result == 0);
-
-      return check;
     }
 
-    private static void asyncLWrite(byte[] buffer)
+    private static byte[] syncReadL(byte[] buffer, int len)
+      throws LibUsbException
     {
-      // ByteBuffer b = BufferUtils.allocateByteBuffer(buffer.length);
-      // System.out.println("B: " + out_buffer.capacity() + " " + buffer.length);
-      // System.out.println("P2: " + out_buffer.limit() + " " + out_buffer.position());
-      // out_buffer.put(buffer, 0, buffer.length);
-      out_buffer.put(buffer);
-      // System.out.println("P2: " + out_buffer.limit() + " " + out_buffer.position());
-      // Transfer transfer = LibUsb.allocTransfer();
-      // LibUsb.fillBulkTransfer(transfer, handle_lusb, US_EPOUT, b, callback, null, 0);
-      int result = LibUsb.submitTransfer(transfer_out);
-      LibUsb.handleEventsCompleted(ctx_lusb, null);
-      // if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Transfer failed", result);
-      if (result != LibUsb.SUCCESS) System.err.println(new LibUsbException("[USBSID] Transfer failed", result));
-      out_buffer.position(0);
-    }
-
-    private static void syncLWrite(byte[] buffer)
-      // throws LibUsbException
-    {
-      // try {
-      // System.out.println("handle_lusb:" + handle_lusb.equals(handle_lusb));
-      // System.out.println("device_lusb:" + device_lusb.equals(device_lusb));
-      // System.out.println("device:" + device.equals(device_lusb));
-      ByteBuffer b = ByteBuffer.allocateDirect(buffer.length);
-      b.put(buffer);
-      IntBuffer transfered = IntBuffer.allocate(1);
-      // System.out.println("HANDLE syncLWrite: " + handle_lusb);
-      // System.out.println("HANDLE b: " + b);
-      // System.out.println("HANDLE transfered: " + transfered);
-      int result = LibUsb.bulkTransfer(handle_lusb, US_EPOUT, b, transfered, 0);
-      if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Transfer failed", result);
-      result = LibUsb.handleEventsTimeout(null, 0);
-      if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to handle events", result);
-      // } catch (LibUsbException LUE) {
-      //   System.out.printf("[USBSID] was already disconnected\n");
-      // }
-    }
-
-    private static byte[] syncLRead()
-      // throws LibUsbException
-    {
-      // try {
-      // System.out.println("handle_lusb:" + handle_lusb.equals(handle_lusb));
-      // System.out.println("device_lusb:" + device_lusb.equals(device_lusb));
-      // System.out.println("device:" + device.equals(device_lusb));
-      ByteBuffer buffer = ByteBuffer.allocateDirect(64);
-      IntBuffer transfered = IntBuffer.allocate(1);
-      // System.out.println("HANDLE syncLWrite: " + handle_lusb);
-      // System.out.println("HANDLE b: " + b);
-      // System.out.println("HANDLE transfered: " + transfered);
-      int result = LibUsb.bulkTransfer(handle_lusb, US_EPIN, buffer, transfered, 0);
-      if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Transfer failed", result);
-      result = LibUsb.handleEventsTimeout(null, 0);
-      if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to handle events", result);
-      // } catch (LibUsbException LUE) {
-      //   System.out.printf("[USBSID] was already disconnected\n");
-      // }
-      byte[] b = new byte[buffer.remaining()];
-      return b;
+      /* Beats me why this is, but hey it works ;) */
+      len *= 2; /* double the size of the read length for 2nd URB package */
+      try {
+        ByteBuffer b_out = ByteBuffer.allocateDirect(buffer.length);
+        b_out.put(buffer);
+        IntBuffer t_out = IntBuffer.allocate(1);
+        result = LibUsb.bulkTransfer(devh, US_EPOUT, b_out, t_out, timeout);
+        ByteBuffer data = ByteBuffer.allocateDirect(len);
+        IntBuffer t_in = IntBuffer.allocate(1);
+        int result = LibUsb.bulkTransfer(devh, US_EPIN, data, t_in, timeout);
+        if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Transfer failed", result);
+        result = LibUsb.handleEventsTimeout(null, timeout);
+        if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to handle events", result);
+        byte[] b_temp = new byte[data.remaining()];
+        data.get(b_temp);
+        byte[] b_in = Arrays.copyOfRange(b_temp, 0, (len/2));
+        return b_in;
+      } catch (LibUsbException LUE) {
+        throw new LibUsbException(LUE.getMessage(), LUE.getErrorCode());
+      }
     }
 
     private static TransferCallback usb_out = new TransferCallback()
     {
-        @Override
-        public void processTransfer(Transfer transfer)
-        {
-          if(transfer.status() != LibUsb.TRANSFER_COMPLETED) {
-            int result = transfer.status();
-            if (result != LibUsb.TRANSFER_CANCELLED) {
-              System.err.printf("[USBSID] Warning: transfer out interrupted with status %d, %s: %s\r", result, LibUsb.errorName(result), LibUsb.strError(result));
-            }
-            LibUsb.freeTransfer(transfer);
-            return;
+      @Override
+      public void processTransfer(Transfer transfer)
+      {
+        if(transfer.status() != LibUsb.TRANSFER_COMPLETED) {
+          int result = transfer.status();
+          if (result != LibUsb.TRANSFER_CANCELLED) {
+            System.err.printf("[USBSID] Warning: transfer out interrupted with status %d, %s: %s\r", result, LibUsb.errorName(result), LibUsb.strError(result));
           }
-          if (transfer.actualLength() != 64) { /* TODO: len out buffer */
-            System.err.printf("[USBSID] Sent data length %d is different from the defined buffer length: %d or actual length %d\r", transfer.length(), 64, transfer.actualLength());
-          }
+          LibUsb.freeTransfer(transfer);
+          return;
         }
+        if (transfer.actualLength() != len_out_buffer) {
+          System.err.printf("[USBSID] Sent data length %d is different from the defined buffer length: %d or actual length %d\r", transfer.length(), 64, transfer.actualLength());
+        }
+      }
     };
 
   }
@@ -493,21 +443,37 @@ public class USBSIDDevice {
 
   /* Public woohah */
 
+  public static void setdriver_USBSID(String driver)
+  {
+    switch (driver) {
+      case "usbx":
+        us_isUSBX = true;
+        break;
+      case "libusb":
+        us_isLIBUSB = true;
+        break;
+      default:
+        us_isUSBX = true;
+        break;
+    }
+    us_overrideDriver = true;
+  }
+
   public static void open_USBSID()
   {
-    setDriverType();
+    if (!us_overrideDriver) setDriverType();
     if (us_isUSBX) {
       try {
         USBX.openUSBX();
       } catch (UsbException UE) {
-        System.err.println("[USBSID] Unhandled exception occured: " + UE);
+        System.err.println("[USBSID] Exception occured: " + UE);
         UE.printStackTrace();
       }
     } else if (us_isLIBUSB) {
       try {
         USBL.openLIBUSB();
       } catch (LibUsbException LUE) {
-        System.err.println("[USBSID] Unhandled exception occured: " + LUE);
+        System.err.println("[USBSID] Exception occured: " + LUE);
         LUE.printStackTrace();
       }
     }
@@ -520,14 +486,14 @@ public class USBSIDDevice {
       try {
         USBX.closeUSBX();
       } catch (UsbException UE) {
-        System.err.println("[USBSID] Unhandled exception occured: " + UE);
+        System.err.println("[USBSID] Exception occured: " + UE);
         UE.printStackTrace();
       }
     } else if (us_isLIBUSB) {
       try {
         USBL.closeLIBUSB();
       } catch (LibUsbException LUE) {
-        System.err.println("[USBSID] Unhandled exception occured: " + LUE);
+        System.err.println("[USBSID] Exception occured: " + LUE);
         LUE.printStackTrace();
       }
     }
@@ -539,14 +505,14 @@ public class USBSIDDevice {
       try {
         USBX.asyncWriteX(buffer);
       } catch (UsbException UE) {
-        System.err.println("[USBSID] Unhandled exception occured: " + UE);
+        System.err.println("[USBSID] Exception occured: " + UE);
         UE.printStackTrace();
       }
     } else if (us_isLIBUSB) {
       try {
-        USBL.asyncLWrite(buffer);
+        USBL.asyncWriteL(buffer);
       } catch (LibUsbException LUE) {
-        System.err.println("[USBSID] Unhandled exception occured: " + LUE);
+        System.err.println("[USBSID] Exception occured: " + LUE);
         LUE.printStackTrace();
       }
     }
@@ -558,34 +524,34 @@ public class USBSIDDevice {
       try {
         USBX.syncWriteX(buffer);
       } catch (UsbException UE) {
-        System.err.println("[USBSID] Unhandled exception occured: " + UE);
+        System.err.println("[USBSID] Exception occured: " + UE);
         UE.printStackTrace();
       }
     } else if (us_isLIBUSB) {
       try {
-        USBL.syncLWrite(buffer);
+        USBL.syncWriteL(buffer);
       } catch (LibUsbException LUE) {
-        System.err.println("[USBSID] Unhandled exception occured: " + LUE);
+        System.err.println("[USBSID] Exception occured: " + LUE);
         LUE.printStackTrace();
       }
     }
   }
 
-  public static byte[] syncRead(int len)
+  public static byte[] syncRead(byte[] buffer, int len)
   {
-    byte[] r = new byte[len];
+    byte[] r = null; // new byte[len];
     if (us_isUSBX) {
       try {
-        r = USBX.syncReadX();
+        r = USBX.syncReadX(buffer, len);
       } catch (UsbException UE) {
-        System.err.println("[USBSID] Unhandled exception occured: " + UE);
+        System.err.println("[USBSID] Exception occured: " + UE);
         UE.printStackTrace();
       }
     } else if (us_isLIBUSB) {
       try {
-        r = USBL.syncLRead();
+        r = USBL.syncReadL(buffer, len);
       } catch (LibUsbException LUE) {
-        System.err.println("[USBSID] Unhandled exception occured: " + LUE);
+        System.err.println("[USBSID] Exception occured: " + LUE);
         LUE.printStackTrace();
       }
     }
@@ -636,8 +602,9 @@ public class USBSIDDevice {
     message[3] = (byte) (b);
     message[4] = (byte) (c);
     message[5] = (byte) (d);
-    syncWrite(message);
-    return syncRead(len);
+    byte[] result = null;
+    result = syncRead(message, len);
+    return result;
   }
 
 }
