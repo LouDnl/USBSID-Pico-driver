@@ -321,14 +321,14 @@ public class USBSIDDevice {
             result = LibUsb.detachKernelDriver(devh, itf);
             if (result != LibUsb.SUCCESS || result != LibUsb.ERROR_NOT_SUPPORTED) throw new LibUsbException("[USBSID] Unable to claim interface", result);
           } catch (LibUsbException LUE) {
-            logger.info(MessageFormat.format("[USBSID] Detaching kerneldriver for interface %d result: %s", itf, LUE.getMessage()));
+            logger.info(MessageFormat.format("[USBSID] Detaching kerneldriver for interface {0} result: {0}", itf, LUE.getMessage()));
           }
         }
         try {
           result = LibUsb.claimInterface(devh, itf);
           if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to claim interface", result);
         } catch (LibUsbException LUE) {
-          logger.info(MessageFormat.format("[USBSID] Claiming interface %d result: %s", itf, LUE.getMessage()));
+          logger.info(MessageFormat.format("[USBSID] Claiming interface {0} result: {0}", itf, LUE.getMessage()));
         }
       }
       kernel_isDetached = true;
@@ -342,14 +342,14 @@ public class USBSIDDevice {
             result = LibUsb.detachKernelDriver(devh, itf);
             if (result != LibUsb.SUCCESS || result != LibUsb.ERROR_NOT_SUPPORTED) throw new LibUsbException("[USBSID] Unable to claim interface", result);
           } catch (LibUsbException LUE) {
-            logger.info(MessageFormat.format("[USBSID] Detaching kerneldriver for interface %d result: %s", itf, LUE.getMessage()));
+            logger.info(MessageFormat.format("[USBSID] Detaching kerneldriver for interface {0} result: {0}", itf, LUE.getMessage()));
           }
         }
         try {
           result = LibUsb.releaseInterface(devh, itf);
           if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to release interface", result);
         } catch (LibUsbException LUE) {
-          logger.info(MessageFormat.format("[USBSID] Release interface %d result: %s", itf, LUE.getMessage()));
+          logger.info(MessageFormat.format("[USBSID] Release interface {0} result: {0}", itf, LUE.getMessage()));
         }
       }
       kernel_isDetached = false;
@@ -418,13 +418,13 @@ public class USBSIDDevice {
         if(transfer.status() != LibUsb.TRANSFER_COMPLETED) {
           int result = transfer.status();
           if (result != LibUsb.TRANSFER_CANCELLED) {
-            logger.severe(MessageFormat.format("[USBSID] Warning: transfer out interrupted with status %d, %s: %s\r", result, LibUsb.errorName(result), LibUsb.strError(result)));
+            logger.severe(MessageFormat.format("[USBSID] Warning: transfer out interrupted with status {0}, {0}: {0}\r", result, LibUsb.errorName(result), LibUsb.strError(result)));
           }
           LibUsb.freeTransfer(transfer);
           return;
         }
         if (transfer.actualLength() != len_out_buffer) {
-          logger.warning(MessageFormat.format("[USBSID] Sent data length %d is different from the defined buffer length: %d or actual length %d\r", transfer.length(), 64, transfer.actualLength()));
+          logger.warning(MessageFormat.format("[USBSID] Sent data length {0} is different from the defined buffer length: {0} or actual length {0}\r", transfer.length(), 64, transfer.actualLength()));
         }
       }
     };

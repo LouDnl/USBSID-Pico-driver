@@ -98,7 +98,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
     throws Exception
   { /* Only call this from the Thread loop! */
     try {
-      // logger.info("Flushbuffer called! @ pos: %d", buffer_pos);
+      // logger.info("Flushbuffer called! @ pos: {0}", buffer_pos);
       thread_buffer[0] = (byte)((Cmd.CYCLED_WRITE.get() << 6) | (buffer_pos - 1));
       final byte[] out_buffer = thread_buffer.clone();
       asyncWrite(out_buffer);
@@ -118,7 +118,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
       thread_buffer[buffer_pos++] = get(); // data
       thread_buffer[buffer_pos++] = get(); // cycles_hi;
       thread_buffer[buffer_pos++] = get(); // cycles_lo;
-      /* logger.info("[W %02d/%02d]$%02X:%02X %d",
+      /* logger.info("[W %02d/%02d]$%02X:%02X {0}",
         (buffer_pos - 4), (buffer_pos - 1),
         thread_buffer[buffer_pos - 4],
         thread_buffer[buffer_pos - 3],
@@ -159,7 +159,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
         diff_size = ((ds >= min_ring_diff) ? ds : default_ring_diff);
       }
       RingBuffer(ring_size);
-      logger.info(MessageFormat.format("[USBSID] Ring buffer size %d with mininum head->tail distance %d", ring_size, diff_size));
+      logger.info(MessageFormat.format("[USBSID] Ring buffer size {0} with mininum head->tail distance {1}", ring_size, diff_size));
       run_thread = true;
       USBSID_Thread.setDaemon(true);
       USBSID_Thread.start();
@@ -242,7 +242,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
     put(data);
     put(cycles_hi);
     put(cycles_lo);
-    /* logger.info("[W]$%02X:%02X %d", (addr & 0xFF), (data & 0xFF), (cycles & 0xFFFF)); */
+    /* logger.info("[W]$%02X:%02X {0}", (addr & 0xFF), (data & 0xFF), (cycles & 0xFFFF)); */
   }
 
   @Override
@@ -291,12 +291,12 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
       /* logger.info("[USBSID] Clock change requested: %.02f", CpuClock); */
       if ((int)CpuClock != cpufrequency) {
         cpufrequency = (int)CpuClock;
-        logger.info(MessageFormat.format("[USBSID] Clock change requested: %d", cpufrequency));
+        logger.info(MessageFormat.format("[USBSID] Clock change requested: {0}", cpufrequency));
         byte freq = 0;
         freq = (byte)CLK.clkID(CLK.getCLK(cpufrequency));
         sendConfigCommand(Cfg.SET_CLOCK.get(), freq);
       } else {
-        logger.info(MessageFormat.format("[USBSID] Clock not changed, already at: %d", cpufrequency));
+        logger.info(MessageFormat.format("[USBSID] Clock not changed, already at: {0}", cpufrequency));
         flush_buffer = true;
         timeSync();
       }
@@ -519,7 +519,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
     long target_time = (last_time + duration);
     long target_delta = (target_time - now);
 
-    /* logger.info("[CYC]%04d [DUR]%06d [NS]%06d [NOW]%06d [LT]%06d [TT]%06d [TD]%06d [CPU]%d",
+    /* logger.info("[CYC]%04d [DUR]%06d [NS]%06d [NOW]%06d [LT]%06d [TT]%06d [TD]%06d [CPU]{0}",
        (cycles & 0xFFFF),
        (duration & 0xFFFFFFFFL), delayNs,
        (now & 0xFFFFFFFFL), (last_time & 0xFFFFFFFFL),
@@ -534,7 +534,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
     long end = 0;
     do {
       end = System.nanoTime();
-      /* logger.info("%d %d %d", start, end, delayNs); */
+      /* logger.info("{0} {0} {0}", start, end, delayNs); */
     } while (start + delayNs >= end);
   }
 

@@ -43,7 +43,7 @@ public class ConnectTest
   private static Logger logger = null;
   static {
     System.setProperty("java.util.logging.SimpleFormatter.format",
-                "[%1$tF %1$tT] [USBSID] [%4$s] %5$s %n");
+                "[%1$tF %1$tT] [TEST] [%4$s] %5$s %n");
     logger = Logger.getLogger(ConnectTest.class.getName());
   }
 
@@ -70,7 +70,7 @@ public class ConnectTest
       return;
 
     final int numsids = usbsid.USBSID_getnumsids();
-    if (checkforError(() -> numsids >= 1, MessageFormat.format("Number of SID's available: {0}", numsids)))
+    if (checkforError(() -> numsids >= 1, "Number of SID's available: " + numsids))
       return;
 
     final String pcbversion = usbsid.USBSID_getpcbversion();
