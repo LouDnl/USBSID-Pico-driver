@@ -101,6 +101,9 @@
               <value>src/test/resources/logging.properties</value>
             </property>
           </systemPropertyVariables>
+          <excludes>
+            <exclude>LibUsbTest.java</exclude>
+          </excludes>
           <includes>
             <include>ConnectTest.java</include>
           </includes>

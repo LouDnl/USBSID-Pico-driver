@@ -1,16 +1,27 @@
 package usbsid;
 
+import java.text.MessageFormat;
+
 // import javax.usb.UsbException;
 
 // import java.io.ByteArrayOutputStream;
 // import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.logging.Logger;
 
 import usbsid.Config.CLK;
 import usbsid.Config.Cfg;
 
 // public class USBSID extends JAVAXDevice implements IUSBSID {
 public class USBSID extends USBSIDDevice implements IUSBSID {
+
+  /* Logging */
+  private static Logger logger = null;
+  static {
+    System.setProperty("java.util.logging.SimpleFormatter.format",
+                "[%1$tF %1$tT] [USBSID] [%4$s] %5$s %n");
+    logger = Logger.getLogger(USBSIDDevice.class.getName());
+  }
 
   private final byte ZERO = 0x0;
 
@@ -65,7 +76,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
     @Override
     public void run() {
       try {
-        System.out.printf("[USBSID] Thread started\n");
+        logger.info("[USBSID] Thread started");
         while (run_thread) {
           if (flush_buffer && (buffer_pos >= 5)) {
             USBSID_flushbuffer();
@@ -76,7 +87,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
             }
           }
         }
-        System.out.printf("[USBSID] Thread stopped\n");
+        logger.info("[USBSID] Thread stopped");
       } catch (Exception E) {
         E.printStackTrace();
       }
@@ -87,7 +98,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
     throws Exception
   { /* Only call this from the Thread loop! */
     try {
-      // System.out.printf("Flushbuffer called! @ pos: %d\n", buffer_pos);
+      // logger.info("Flushbuffer called! @ pos: %d", buffer_pos);
       thread_buffer[0] = (byte)((Cmd.CYCLED_WRITE.get() << 6) | (buffer_pos - 1));
       final byte[] out_buffer = thread_buffer.clone();
       asyncWrite(out_buffer);
@@ -95,7 +106,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
       flush_buffer = false;
       buffer_pos = 1;
     } catch (Exception E) {
-      System.err.println("[USBSID] Unhandled exception occured: " + E);
+      logger.severe("[USBSID] Unhandled exception occured: " + E);
       throw E;
     }
   }
@@ -107,7 +118,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
       thread_buffer[buffer_pos++] = get(); // data
       thread_buffer[buffer_pos++] = get(); // cycles_hi;
       thread_buffer[buffer_pos++] = get(); // cycles_lo;
-      /* System.out.printf("[W %02d/%02d]$%02X:%02X %d\n",
+      /* logger.info("[W %02d/%02d]$%02X:%02X %d",
         (buffer_pos - 4), (buffer_pos - 1),
         thread_buffer[buffer_pos - 4],
         thread_buffer[buffer_pos - 3],
@@ -121,7 +132,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
         Arrays.fill(thread_buffer, (byte)0);
       }
     } catch (Exception E) {
-      System.err.println("[USBSID] Unhandled exception occured: " + E);
+      logger.severe("[USBSID] Unhandled exception occured: " + E);
       throw E;
     }
   }
@@ -130,13 +141,13 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
   public int USBSID_init(Integer...vars)
   {
     if (device != null && isOpen()) {
-      System.err.printf("[USBSID] Device is already open!\n");
+      logger.warning("[USBSID] Device is already open!");
       flush_buffer = true;
       return -1;
     }
     open_USBSID();
     if (isOpen()) {
-      System.out.printf("[USBSID] USBSID-Pico opened\n");
+      logger.info("[USBSID] USBSID-Pico opened");
       ring_read = ring_write = 0;
       if (vars.length > 0) {
         Integer rs = vars[0];
@@ -148,7 +159,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
         diff_size = ((ds >= min_ring_diff) ? ds : default_ring_diff);
       }
       RingBuffer(ring_size);
-      System.out.printf("[USBSID] Ring buffer size %d with mininum head->tail distance %d\n", ring_size, diff_size);
+      logger.info(MessageFormat.format("[USBSID] Ring buffer size %d with mininum head->tail distance %d", ring_size, diff_size));
       run_thread = true;
       USBSID_Thread.setDaemon(true);
       USBSID_Thread.start();
@@ -183,19 +194,19 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
   {
     try {
       if (device == null || !isOpen()) {
-        System.err.printf("[USBSID] Device is not open!\n");
+        logger.warning("[USBSID] Device is not open!");
         return;
       }
       USBSID_setflush();
       ring_read = ring_write = 0;
       run_thread = false;
       USBSID_Thread.join();
-      System.out.printf("[USBSID] Thread joined\n");
+      logger.info("[USBSID] Thread joined");
       close_USBSID();
-      System.out.printf("[USBSID] USBSID-Pico closed\n");
+      logger.info("[USBSID] USBSID-Pico closed");
       return;
     } catch (InterruptedException | NumberFormatException E) {
-      System.err.println("[USBSID] Exception occured: " + E.getMessage() + E.getCause());
+      logger.severe("[USBSID] Exception occured: " + E.getMessage() + E.getCause());
       E.printStackTrace();
       return;
     }
@@ -215,7 +226,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
       writebuffer[4] = (byte)cycles_lo;
       asyncWrite(writebuffer);
     } catch (Exception E) {
-      System.err.println("[USBSID] Unhandled exception occured: " + E);
+      logger.severe("[USBSID] Unhandled exception occured: " + E);
       E.printStackTrace();
       return;
     }
@@ -231,7 +242,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
     put(data);
     put(cycles_hi);
     put(cycles_lo);
-    /* System.out.printf("[W]$%02X:%02X %d\n", (addr & 0xFF), (data & 0xFF), (cycles & 0xFFFF)); */
+    /* logger.info("[W]$%02X:%02X %d", (addr & 0xFF), (data & 0xFF), (cycles & 0xFFFF)); */
   }
 
   @Override
@@ -241,7 +252,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
       flush_buffer = true;
       timeSync();
     } catch (Exception E) {
-      System.err.println("[USBSID] Unhandled exception occured: " + E);
+      logger.severe("[USBSID] Unhandled exception occured: " + E);
       E.printStackTrace();
       return;
     }
@@ -252,7 +263,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
   {
     try {
       if (device == null || !isOpen()) {
-        System.err.printf("[USBSID] Device is not open!\n");
+        logger.warning("[USBSID] Device is not open!");
         return;
       }
       /* BUG: SKPICO WILL HAVE VOLUME AT 0 DUE TO NOT RESETTING FAST ENOUGH! */
@@ -262,7 +273,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
       flush_buffer = true;
       timeSync();
     } catch (Exception E) {
-      System.err.println("[USBSID] Exception occured: " + E);
+      logger.severe("[USBSID] Exception occured: " + E);
       E.printStackTrace();
       return;
     }
@@ -277,20 +288,20 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
         cpufrequency = CLK.IDclk((int)clock[0]);
         clk_retrieved = true;
       }
-      /* System.out.printf("[USBSID] Clock change requested: %.02f\n", CpuClock); */
+      /* logger.info("[USBSID] Clock change requested: %.02f", CpuClock); */
       if ((int)CpuClock != cpufrequency) {
         cpufrequency = (int)CpuClock;
-        System.out.printf("[USBSID] Clock change requested: %d\n", cpufrequency);
+        logger.info(MessageFormat.format("[USBSID] Clock change requested: %d", cpufrequency));
         byte freq = 0;
         freq = (byte)CLK.clkID(CLK.getCLK(cpufrequency));
         sendConfigCommand(Cfg.SET_CLOCK.get(), freq);
       } else {
-        System.out.printf("[USBSID] Clock not changed, already at: %d\n", cpufrequency);
+        logger.info(MessageFormat.format("[USBSID] Clock not changed, already at: %d", cpufrequency));
         flush_buffer = true;
         timeSync();
       }
     } catch (Exception E) {
-      System.err.println("[USBSID] Unhandled exception occured: " + E);
+      logger.severe("[USBSID] Unhandled exception occured: " + E);
       E.printStackTrace();
       return;
     }
@@ -303,7 +314,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
       sendConfigCommand(Cfg.SET_AUDIO.get(), (byte)stereo);
       return stereo;
     } catch (Exception E) {
-      System.err.println("[USBSID] Unhandled exception occured: " + E);
+      logger.severe("[USBSID] Unhandled exception occured: " + E);
       E.printStackTrace();
     }
     return -1;
@@ -316,7 +327,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
     try {
       socketcfg = rwConfigCommand(Cfg.READ_SOCKETCFG.get(), 10);
     } catch (Exception E) {
-      System.err.println("[USBSID] Unhandled exception occured: " + E);
+      logger.severe("[USBSID] Unhandled exception occured: " + E);
       E.printStackTrace();
     }
     return socketcfg;
@@ -461,7 +472,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
       byte[] r = rwConfigCommand(Cfg.READ_NUMSIDS.get(), 1);
       numsids = (int)r[0];
     } catch (Exception E) {
-      System.err.println("[USBSID] Unhandled exception occured: " + E);
+      logger.severe("[USBSID] Unhandled exception occured: " + E);
       E.printStackTrace();
     }
     return numsids;
@@ -477,7 +488,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
       byte[] bytes = Arrays.copyOfRange(result, 2, (2+length));
       pcbversion = new String(bytes);
     } catch (Exception E) {
-      System.err.println("[USBSID] Unhandled exception occured: " + E);
+      logger.severe("[USBSID] Unhandled exception occured: " + E);
       E.printStackTrace();
     }
     return pcbversion;
@@ -493,7 +504,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
       byte[] bytes = Arrays.copyOfRange(result, 2, (2+length));
       fwversion = new String(bytes);
     } catch (Exception E) {
-      System.err.println("[USBSID] Unhandled exception occured: " + E);
+      logger.severe("[USBSID] Unhandled exception occured: " + E);
       E.printStackTrace();
     }
     return fwversion;
@@ -508,7 +519,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
     long target_time = (last_time + duration);
     long target_delta = (target_time - now);
 
-    /* System.out.printf("[CYC]%04d [DUR]%06d [NS]%06d [NOW]%06d [LT]%06d [TT]%06d [TD]%06d [CPU]%d\n",
+    /* logger.info("[CYC]%04d [DUR]%06d [NS]%06d [NOW]%06d [LT]%06d [TT]%06d [TD]%06d [CPU]%d",
        (cycles & 0xFFFF),
        (duration & 0xFFFFFFFFL), delayNs,
        (now & 0xFFFFFFFFL), (last_time & 0xFFFFFFFFL),
@@ -523,7 +534,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
     long end = 0;
     do {
       end = System.nanoTime();
-      /* System.out.printf("%d %d %d\n", start, end, delayNs); */
+      /* logger.info("%d %d %d", start, end, delayNs); */
     } while (start + delayNs >= end);
   }
 

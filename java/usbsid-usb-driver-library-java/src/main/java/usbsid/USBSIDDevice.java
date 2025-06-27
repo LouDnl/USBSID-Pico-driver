@@ -3,6 +3,7 @@ package usbsid;
 // import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
+import java.text.MessageFormat;
 import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Logger;
@@ -37,6 +38,14 @@ import javax.usb.UsbHub;
 
 
 public class USBSIDDevice {
+
+  /* Logging */
+  private static Logger logger = null;
+  static {
+    System.setProperty("java.util.logging.SimpleFormatter.format",
+                "[%1$tF %1$tT] [USBSID] [%4$s] %5$s %n");
+    logger = Logger.getLogger(USBSIDDevice.class.getName());
+  }
 
   /* Device constants */
   private static byte US_CFG = 1;
@@ -74,7 +83,7 @@ public class USBSIDDevice {
           UsbHostManager.getUsbServices().getRootUsbHub());
       if (xdevice == null)
       {
-          System.err.printf("USBSID-Pico not found\n");
+          logger.warning("USBSID-Pico not found");
           return;
       }
       device = xdevice;
@@ -106,7 +115,7 @@ public class USBSIDDevice {
       try {
         if (iface.isClaimed()) iface.release();
       } catch (javax.usb.UsbPlatformException uPE) {
-        System.out.printf("Device not found for re-attaching kernel, skipping.\n");
+        logger.info("Device not found for re-attaching kernel, skipping.");
       }
     }
 
@@ -137,7 +146,7 @@ public class USBSIDDevice {
       try {
         pipe_out.asyncSubmit(buffer);
       } catch (javax.usb.UsbDisconnectedException UDE) {
-        System.out.printf("[USBSID] was already disconnected\n");
+        logger.info("[USBSID] was already disconnected");
       }
     }
 
@@ -147,7 +156,7 @@ public class USBSIDDevice {
       try {
         pipe_out.syncSubmit(buffer);
       } catch (javax.usb.UsbDisconnectedException UDE) {
-        System.out.printf("[USBSID] was already disconnected\n");
+        logger.info("[USBSID] was already disconnected");
       }
     }
 
@@ -161,7 +170,7 @@ public class USBSIDDevice {
         pipe_out.syncSubmit(buffer);
         pipe_in.syncSubmit(data);
       } catch (javax.usb.UsbDisconnectedException UDE) {
-        System.out.printf("[USBSID] was already disconnected\n");
+        logger.info("[USBSID] was already disconnected");
       }
       byte[] b_in = Arrays.copyOfRange(data, 0, (len/2));
       return b_in;
@@ -201,14 +210,16 @@ public class USBSIDDevice {
 
       result = findLUSBSID(VENDOR_ID, PRODUCT_ID);
       if (ldevice == null) {
-        System.err.printf("USBSID-Pico not found\n");
+        logger.warning("USBSID-Pico not found");
         return;
       }
       if ((ldevice != null) && us_isAvailable) {
         try {
           devh = LibUsb.openDeviceWithVidPid(ctx, VENDOR_ID, PRODUCT_ID);
         } catch (LibUsbException LUE) {
-          System.out.println(new LibUsbException("[USBSID] Opening device unsuccessful, trying a different method", result));
+          String error = "[USBSID] Opening device unsuccessful";
+          logger.severe(error);
+          throw(new LibUsbException(error, result));
         }
       } else {
         device = null;
@@ -273,7 +284,7 @@ public class USBSIDDevice {
         ByteBuffer buffer = ByteBuffer.allocateDirect(0);
         result = LibUsb.controlTransfer(devh, (byte)0x21, (byte)0x22, (short)(ACM_CTRL_DTR | ACM_CTRL_RTS), (short)0, buffer, (long)100);
       } catch (LibUsbException LUE) {
-        System.out.println("CONFIG ERROR: " + result);
+        logger.info("CONFIG ERROR: " + result);
       }
     }
 
@@ -283,7 +294,7 @@ public class USBSIDDevice {
         out_buffer = LibUsb.devMemAlloc(devh, len_out_buffer);
         if (out_buffer == null) throw new Exception("[USBSID] LibUsb.devMemAlloc failed", null);
       } catch (Exception e) {
-        System.out.println("[USBSID] Unable to use devMemAlloc, allocating default");
+        logger.info("[USBSID] Unable to use devMemAlloc, allocating default");
         out_buffer = BufferUtils.allocateByteBuffer(len_out_buffer);
       }
       transfer_out = LibUsb.allocTransfer();
@@ -297,7 +308,7 @@ public class USBSIDDevice {
       try {
         LibUsb.devMemFree(devh, out_buffer, len_out_buffer);
       } catch (Exception e) {
-        System.out.println("[USBSID] Unable to use devMemFree, freeing default");
+        logger.info("[USBSID] Unable to use devMemFree, freeing default");
         out_buffer = null;
       }
     }
@@ -310,14 +321,14 @@ public class USBSIDDevice {
             result = LibUsb.detachKernelDriver(devh, itf);
             if (result != LibUsb.SUCCESS || result != LibUsb.ERROR_NOT_SUPPORTED) throw new LibUsbException("[USBSID] Unable to claim interface", result);
           } catch (LibUsbException LUE) {
-            System.out.printf("[USBSID] Detaching kerneldriver for interface %d result: %s\n", itf, LUE.getMessage());
+            logger.info(MessageFormat.format("[USBSID] Detaching kerneldriver for interface %d result: %s", itf, LUE.getMessage()));
           }
         }
         try {
           result = LibUsb.claimInterface(devh, itf);
           if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to claim interface", result);
         } catch (LibUsbException LUE) {
-          System.out.printf("[USBSID] Claiming interface %d result: %s\n", itf, LUE.getMessage());
+          logger.info(MessageFormat.format("[USBSID] Claiming interface %d result: %s", itf, LUE.getMessage()));
         }
       }
       kernel_isDetached = true;
@@ -331,14 +342,14 @@ public class USBSIDDevice {
             result = LibUsb.detachKernelDriver(devh, itf);
             if (result != LibUsb.SUCCESS || result != LibUsb.ERROR_NOT_SUPPORTED) throw new LibUsbException("[USBSID] Unable to claim interface", result);
           } catch (LibUsbException LUE) {
-            System.out.printf("[USBSID] Detaching kerneldriver for interface %d result: %s\n", itf, LUE.getMessage());
+            logger.info(MessageFormat.format("[USBSID] Detaching kerneldriver for interface %d result: %s", itf, LUE.getMessage()));
           }
         }
         try {
           result = LibUsb.releaseInterface(devh, itf);
           if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to release interface", result);
         } catch (LibUsbException LUE) {
-          System.out.printf("[USBSID] Release interface %d result: %s\n", itf, LUE.getMessage());
+          logger.info(MessageFormat.format("[USBSID] Release interface %d result: %s", itf, LUE.getMessage()));
         }
       }
       kernel_isDetached = false;
@@ -350,7 +361,7 @@ public class USBSIDDevice {
         out_buffer.put(buffer);
         int result = LibUsb.submitTransfer(transfer_out);
         LibUsb.handleEventsCompleted(ctx, null);
-        if (result != LibUsb.SUCCESS) System.err.println(new LibUsbException("[USBSID] Transfer failed", result));
+        if (result != LibUsb.SUCCESS) throw(new LibUsbException("[USBSID] Transfer failed", result));
       } catch (LibUsbException LUE) {
         throw new LibUsbException(LUE.getMessage(), LUE.getErrorCode());
       } finally {
@@ -407,13 +418,13 @@ public class USBSIDDevice {
         if(transfer.status() != LibUsb.TRANSFER_COMPLETED) {
           int result = transfer.status();
           if (result != LibUsb.TRANSFER_CANCELLED) {
-            System.err.printf("[USBSID] Warning: transfer out interrupted with status %d, %s: %s\r", result, LibUsb.errorName(result), LibUsb.strError(result));
+            logger.severe(MessageFormat.format("[USBSID] Warning: transfer out interrupted with status %d, %s: %s\r", result, LibUsb.errorName(result), LibUsb.strError(result)));
           }
           LibUsb.freeTransfer(transfer);
           return;
         }
         if (transfer.actualLength() != len_out_buffer) {
-          System.err.printf("[USBSID] Sent data length %d is different from the defined buffer length: %d or actual length %d\r", transfer.length(), 64, transfer.actualLength());
+          logger.warning(MessageFormat.format("[USBSID] Sent data length %d is different from the defined buffer length: %d or actual length %d\r", transfer.length(), 64, transfer.actualLength()));
         }
       }
     };
@@ -466,14 +477,14 @@ public class USBSIDDevice {
       try {
         USBX.openUSBX();
       } catch (UsbException UE) {
-        System.err.println("[USBSID] Exception occured: " + UE);
+        logger.warning("[USBSID] Exception occured: " + UE);
         UE.printStackTrace();
       }
     } else if (us_isLIBUSB) {
       try {
         USBL.openLIBUSB();
       } catch (LibUsbException LUE) {
-        System.err.println("[USBSID] Exception occured: " + LUE);
+        logger.warning("[USBSID] Exception occured: " + LUE);
         LUE.printStackTrace();
       }
     }
@@ -486,14 +497,14 @@ public class USBSIDDevice {
       try {
         USBX.closeUSBX();
       } catch (UsbException UE) {
-        System.err.println("[USBSID] Exception occured: " + UE);
+        logger.warning("[USBSID] Exception occured: " + UE);
         UE.printStackTrace();
       }
     } else if (us_isLIBUSB) {
       try {
         USBL.closeLIBUSB();
       } catch (LibUsbException LUE) {
-        System.err.println("[USBSID] Exception occured: " + LUE);
+        logger.warning("[USBSID] Exception occured: " + LUE);
         LUE.printStackTrace();
       }
     }
@@ -505,14 +516,14 @@ public class USBSIDDevice {
       try {
         USBX.asyncWriteX(buffer);
       } catch (UsbException UE) {
-        System.err.println("[USBSID] Exception occured: " + UE);
+        logger.warning("[USBSID] Exception occured: " + UE);
         UE.printStackTrace();
       }
     } else if (us_isLIBUSB) {
       try {
         USBL.asyncWriteL(buffer);
       } catch (LibUsbException LUE) {
-        System.err.println("[USBSID] Exception occured: " + LUE);
+        logger.warning("[USBSID] Exception occured: " + LUE);
         LUE.printStackTrace();
       }
     }
@@ -524,14 +535,14 @@ public class USBSIDDevice {
       try {
         USBX.syncWriteX(buffer);
       } catch (UsbException UE) {
-        System.err.println("[USBSID] Exception occured: " + UE);
+        logger.warning("[USBSID] Exception occured: " + UE);
         UE.printStackTrace();
       }
     } else if (us_isLIBUSB) {
       try {
         USBL.syncWriteL(buffer);
       } catch (LibUsbException LUE) {
-        System.err.println("[USBSID] Exception occured: " + LUE);
+        logger.warning("[USBSID] Exception occured: " + LUE);
         LUE.printStackTrace();
       }
     }
@@ -544,14 +555,14 @@ public class USBSIDDevice {
       try {
         r = USBX.syncReadX(buffer, len);
       } catch (UsbException UE) {
-        System.err.println("[USBSID] Exception occured: " + UE);
+        logger.warning("[USBSID] Exception occured: " + UE);
         UE.printStackTrace();
       }
     } else if (us_isLIBUSB) {
       try {
         r = USBL.syncReadL(buffer, len);
       } catch (LibUsbException LUE) {
-        System.err.println("[USBSID] Exception occured: " + LUE);
+        logger.warning("[USBSID] Exception occured: " + LUE);
         LUE.printStackTrace();
       }
     }
