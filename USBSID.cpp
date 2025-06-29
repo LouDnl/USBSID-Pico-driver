@@ -34,6 +34,10 @@
 using namespace USBSID_NS;
 using namespace std;
 
+#ifndef count_of
+#define count_of(a) (sizeof(a)/sizeof(uint8_t))
+#endif
+
 static inline uint8_t* us_alloc(size_t alignment, size_t size)
 {
 #if defined(__US_LINUX_COMPILE)
@@ -596,41 +600,6 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff, uint16_t cycle
 
 /* THREADING */
 
-void USBSID_Class::USBSID_Flush(void)
-{
-  USBSID_SetFlush();
-  USBSID_FlushBuffer();
-  return;
-}
-
-void USBSID_Class::USBSID_SetFlush(void)
-{
-  flush_buffer = 1;
-  return;
-}
-
-void USBSID_Class::USBSID_FlushBuffer(void)
-{
-  if (threaded && flush_buffer == 1
-    && ((withcycles == 1)
-    ? (buffer_pos >= 5)
-    : (buffer_pos >= 3))) {
-    thread_buffer[0] = (withcycles == 1)
-      ? (CYCLED_WRITE << 6 | (buffer_pos - 1))
-      : (WRITE << 6 | (buffer_pos - 1));
-    memcpy(out_buffer, thread_buffer, buffer_pos);
-    buffer_pos = 1;
-    flush_buffer = 0;
-    libusb_submit_transfer(transfer_out);
-    libusb_handle_events_completed(ctx, NULL);
-    memset(thread_buffer, 0, 64);
-    memset(out_buffer, 0, len_out_buffer);
-  } else {
-    flush_buffer = 0;
-  }
-  return;
-}
-
 void* USBSID_Class::USBSID_Thread(void)
 { /* Only starts when threaded == true */
   USBDBG(stdout, "[USBSID] Thread starting\r\n");
@@ -647,11 +616,13 @@ void* USBSID_Class::USBSID_Thread(void)
     if (flush_buffer == 1) {
       USBSID_FlushBuffer();
     }
-    while (ringbuffer.ring_read != ringbuffer.ring_write) {
-      if (withcycles) {
-        USBSID_RingPopCycled();
-      } else {
-        USBSID_RingPop();
+    if (us_ringbuffer.ring_read != us_ringbuffer.ring_write) {
+      if (USBSID_RingDiff() > diff_size) {
+        if (withcycles) {
+            USBSID_RingPopCycled();
+        } else {
+          USBSID_RingPop();
+        }
       }
       /* USBSID_FillMemory(); */
       /* USBSID_DebugPrint(); */
@@ -670,8 +641,9 @@ int USBSID_Class::USBSID_InitThread(void)
   /* Init ringbuffer */
   flush_buffer = 0;
   run_thread = buffer_pos = 1;
-  ringbuffer.ring_read = ringbuffer.ring_write = 0;
   pthread_mutex_lock(&us_mutex);
+  // USBSID_InitRingBuffer();
+  USBSID_InitRingBuffer(ring_size, diff_size);
   us_thread++;
   pthread_mutex_unlock(&us_mutex);
   int error;
@@ -688,7 +660,7 @@ void USBSID_Class::USBSID_StopThread(void)
   if (USBSID_IsRunning() == 1) {
     USBDBG(stdout, "[USBSID] Set thread exit = 1\r\n");
     run_thread = flush_buffer = 0;
-    ringbuffer.ring_read = 0, ringbuffer.ring_write = 0;
+    USBSID_DeInitRingBuffer();
     pthread_join(us_ptid, NULL);
     USBDBG(stdout, "[USBSID] Thread attached\r\n");
     threaded = withcycles = false;
@@ -739,13 +711,125 @@ void USBSID_Class::USBSID_DisableThread(void)
   USBSID_StopThread();
 }
 
-/* RINGBUFFER FOR THREADED WRITES */
+
+/* RINGBUFFER */
+
+void USBSID_Class::USBSID_ResetRingBuffer(void)
+{
+  us_ringbuffer.ring_read = us_ringbuffer.ring_write = 0;
+}
+
+void USBSID_Class::USBSID_SetBufferSize(int size)
+{
+  if (size >= min_ring_size)
+    ring_size = size;
+  else ring_size = min_ring_size;
+  return;
+}
+
+void USBSID_Class::USBSID_SetDiffSize(int size)
+{
+  if (size >= min_diff_size)
+    diff_size = size;
+  else diff_size = min_diff_size;
+  return;
+}
+
+void USBSID_Class::USBSID_InitRingBuffer(int buffer_size, int differ_size)
+{ /* Init with variable settings */
+  USBSID_SetBufferSize(buffer_size);
+  USBSID_SetDiffSize(differ_size);
+  USBSID_ResetRingBuffer();
+  us_ringbuffer.ringbuffer = us_alloc(2 * ring_size, (sizeof(uint8_t)) * ring_size);
+  USBDBG(stdout, "[USBSID] Init RingBuffer with size: %d and diffsize: %d\n",
+     buffer_size, differ_size);
+}
+
+void USBSID_Class::USBSID_InitRingBuffer(void)
+{ /* Init with default settings or with values set prior to calling this function  */
+  USBSID_SetBufferSize(ring_size);
+  USBSID_SetDiffSize(diff_size);
+  USBSID_ResetRingBuffer();
+  us_ringbuffer.ringbuffer = us_alloc(2 * ring_size, (sizeof(uint8_t)) * ring_size);
+  USBDBG(stdout, "[USBSID] Init RingBuffer with default size: %d and default diffsize: %d\n",
+     ring_size, diff_size);
+}
+
+void USBSID_Class::USBSID_DeInitRingBuffer(void)
+{
+  USBSID_ResetRingBuffer();
+  USBSID_SetBufferSize(min_ring_size);
+  USBSID_SetDiffSize(min_diff_size);
+  if (us_ringbuffer.ringbuffer) us_free(us_ringbuffer.ringbuffer);
+}
+
+bool USBSID_Class::USBSID_IsHigher()
+{
+  return (us_ringbuffer.ring_read < us_ringbuffer.ring_write);
+}
+
+int USBSID_Class::USBSID_RingDiff()
+{
+  int d = (USBSID_IsHigher() ? (us_ringbuffer.ring_read - us_ringbuffer.ring_write) : (us_ringbuffer.ring_write - us_ringbuffer.ring_read));
+  return ((d < 0) ? (d * -1) : d);
+}
+
+void USBSID_Class::USBSID_RingPut(uint8_t item)
+{
+  us_ringbuffer.ringbuffer[us_ringbuffer.ring_write] = item;
+  us_ringbuffer.ring_write = (us_ringbuffer.ring_write + 1) % ring_size;
+}
+
+uint8_t USBSID_Class::USBSID_RingGet()
+{
+  uint8_t item = us_ringbuffer.ringbuffer[us_ringbuffer.ring_read];
+  us_ringbuffer.ring_read = (us_ringbuffer.ring_read + 1) % ring_size;
+  return item;
+}
+
+void USBSID_Class::USBSID_Flush(void)
+{
+  USBSID_SetFlush();
+  USBSID_FlushBuffer();
+  return;
+}
+
+void USBSID_Class::USBSID_SetFlush(void)
+{
+  flush_buffer = 1;
+  return;
+}
+
+
+/* RINGBUFFER READS & WRITES */
+
+void USBSID_Class::USBSID_FlushBuffer(void)
+{
+  if (threaded && flush_buffer == 1
+    && ((withcycles == 1)
+    ? (buffer_pos >= 5)
+    : (buffer_pos >= 3))) {
+    thread_buffer[0] = (withcycles == 1)
+      ? (CYCLED_WRITE << 6 | (buffer_pos - 1))
+      : (WRITE << 6 | (buffer_pos - 1));
+    memcpy(out_buffer, thread_buffer, buffer_pos);
+    buffer_pos = 1;
+    flush_buffer = 0;
+    libusb_submit_transfer(transfer_out);
+    libusb_handle_events_completed(ctx, NULL);
+    memset(thread_buffer, 0, 64);
+    memset(out_buffer, 0, len_out_buffer);
+  } else {
+    flush_buffer = 0;
+  }
+  return;
+}
 
 void USBSID_Class::USBSID_WriteRing(uint8_t reg, uint8_t val)
 {
   if (threaded && !withcycles) {
-    ringbuffer.ringpush = ((reg & 0xFF) << 8) | val;
-    ringbuffer.ring_buffer[ringbuffer.ring_write++] = ringbuffer.ringpush;
+    USBSID_RingPut(reg);
+    USBSID_RingPut(val);
   } else {
     USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded = %d and withcycles = %d\n", __func__, threaded, withcycles);
   }
@@ -755,10 +839,10 @@ void USBSID_Class::USBSID_WriteRing(uint8_t reg, uint8_t val)
 void USBSID_Class::USBSID_WriteRingCycled(uint8_t reg, uint8_t val, uint16_t cycles)
 {
   if (threaded && withcycles) {
-    ringbuffer.ringpush = ((reg & 0xFF) << 8) | val;
-    ringbuffer.ring_buffer[ringbuffer.ring_write++] = ringbuffer.ringpush;
-    ringbuffer.ringpush = cycles;
-    ringbuffer.ring_buffer[ringbuffer.ring_write++] = ringbuffer.ringpush;
+    USBSID_RingPut(reg);
+    USBSID_RingPut(val);
+    USBSID_RingPut((cycles >> 8) & 0xFF);
+    USBSID_RingPut(cycles & 0xFF);
   } else {
     USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded = %d and withcycles = %d\n", __func__, threaded, withcycles);
   }
@@ -767,16 +851,10 @@ void USBSID_Class::USBSID_WriteRingCycled(uint8_t reg, uint8_t val, uint16_t cyc
 
 void USBSID_Class::USBSID_RingPopCycled(void)
 {
-  ringbuffer.ringpop = ringbuffer.ring_buffer[ringbuffer.ring_read++];
-  uint8_t reg = (uint8_t)(ringbuffer.ringpop >> 8);
-  uint8_t val = (uint8_t)(ringbuffer.ringpop & 0xFF);
-  ringbuffer.ringpop = ringbuffer.ring_buffer[ringbuffer.ring_read++];
-  uint16_t cycles = ringbuffer.ringpop;
-
-  thread_buffer[buffer_pos++] = reg; /* register */
-  thread_buffer[buffer_pos++] = val; /* value */
-  thread_buffer[buffer_pos++] = (cycles >> 8);  /* n cycles high */
-  thread_buffer[buffer_pos++] = (cycles & 0xFF);  /* n cycles low */
+  thread_buffer[buffer_pos++] = USBSID_RingGet();  /* register */
+  thread_buffer[buffer_pos++] = USBSID_RingGet();  /* value */
+  thread_buffer[buffer_pos++] = USBSID_RingGet();  /* n cycles high */
+  thread_buffer[buffer_pos++] = USBSID_RingGet();  /* n cycles low */
 
   if (buffer_pos == 61  /* >= 61 || >= 4 */
       || buffer_pos == len_out_buffer
@@ -796,11 +874,10 @@ void USBSID_Class::USBSID_RingPopCycled(void)
 void USBSID_Class::USBSID_RingPop(void)
 {
   write_completed = 0;
-  ringbuffer.ringpop = ringbuffer.ring_buffer[ringbuffer.ring_read++];
 
   /* Ex: 0xD418 */
-  thread_buffer[buffer_pos++] = (uint8_t)(ringbuffer.ringpop >> 8);
-  thread_buffer[buffer_pos++] = (uint8_t)(ringbuffer.ringpop & 0xFF);
+  thread_buffer[buffer_pos++] = USBSID_RingGet();  /* register */
+  thread_buffer[buffer_pos++] = USBSID_RingGet();  /* value */
   if (buffer_pos == 63  /* >= 61 || >= 4 */
     || buffer_pos == len_out_buffer
     || flush_buffer == 1) {
@@ -820,12 +897,11 @@ uint8_t * USBSID_Class::USBSID_RingPop(bool return_busvalue)
 { /* Unused at the moment */
 #ifdef DEBUG_USBSID_MEMORY
   write_completed = 0;
-  ringbuffer.ringpop = ringbuffer.ring_buffer[ringbuffer.ring_read++];
 
   /* Ex: 0xD418 */
   out_buffer[0] = 0x0;
-  out_buffer[1] = (uint8_t)(ringbuffer.ringpop >> 8);
-  out_buffer[2] = (uint8_t)(ringbuffer.ringpop & 0xFF);
+  out_buffer[1] = USBSID_RingGet();  /* register */
+  out_buffer[2] = USBSID_RingGet();  /* value */
   libusb_submit_transfer(transfer_out);
   libusb_handle_events_completed(ctx, NULL);
 
@@ -909,12 +985,10 @@ void USBSID_Class::USBSID_FlushMemory(void)
 void USBSID_Class::USBSID_FillMemory(void)
 { /* Unused at the moment */
   #ifdef DEBUG_USBSID_MEMORY
-  ringbuffer.ringpop = ringbuffer.ring_buffer[ringbuffer.ring_read++];
-  uint8_t reg = (uint8_t)(ringbuffer.ringpop >> 8);
-  uint8_t val = (uint8_t)(ringbuffer.ringpop & 0xFF);
-  ringbuffer.ringpop = ringbuffer.ring_buffer[ringbuffer.ring_read++];
-  /* int c = ((ringbuffer.ringpop & 0x8000) == 0x8000); */
-  uint16_t cycles = (ringbuffer.ringpop ^ 0x8000);
+  uint8_t reg = USBSID_RingGet();
+  uint8_t val = USBSID_RingGet();
+  /* int c = ((us_ringbuffer.ringpop & 0x8000) == 0x8000); */
+  uint16_t cycles = (((USBSID_RingGet() << 8) | USBSID_RingGet()) ^ 0x8000);
   if (sid_memory_changed[reg] == 0) {
     sid_memory[reg] = val;
     sid_memory_changed[reg]++;

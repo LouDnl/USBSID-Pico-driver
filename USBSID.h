@@ -26,9 +26,9 @@
 #ifndef _USBSID_H_
 #define _USBSID_H_
 
-#if defined(__linux__) || defined(__linux) || defined(linux) || defined(__unix__)
+#if defined(__linux__) || defined(__linux) || defined(linux) || defined(__unix__) || defined(__APPLE__)
   #define __US_LINUX_COMPILE
-#elif defined(_WIN32) || defined(_WIN64)
+#elif defined(_WIN32) || defined(_WIN64) || defined(__MINGW32__) || defined(__MINGW64__)
   #define __US_WINDOWS_COMPILE
 #endif
 
@@ -73,7 +73,8 @@
 // #define US_RESET_ON_EXIT      /* Send Reset SID command on LIBUSB Exit */
 
 
-/* #define USBSID_DEBUG */
+/* Uncomment for debug logging */
+// #define USBSID_DEBUG
 #ifdef USBSID_DEBUG
   #define USBDBG(...) fprintf(__VA_ARGS__)
   #ifdef USBSID_MEMDEBUG
@@ -164,12 +165,15 @@ namespace USBSID_NS
 
   /* Ringbuffer related */
   typedef struct {
-    uint8_t ring_read;
-    uint8_t ring_write;
-    uint16_t ring_buffer[256] = {0};
-    uint16_t ringpush = 0, ringpop = 0;
-  } ring_buffer;
-  static ring_buffer ringbuffer;
+    int ring_read;
+    int ring_write;
+    uint8_t * __restrict__ ringbuffer;
+  } ring_buffer_t;
+  static ring_buffer_t us_ringbuffer;
+  const int min_diff_size = 16;
+  const int min_ring_size = 256;
+  static int diff_size = 64;
+  static int ring_size = 8192;
 
   /* Clock cycles per second
    * Clock speed: 0.985 MHz (PAL) or 1.023 MHz (NTSC)
@@ -279,10 +283,22 @@ namespace USBSID_NS
       pthread_t us_ptid;
 
       /* Ringbuffer */
+      void USBSID_ResetRingBuffer(void);
+      void USBSID_SetBufferSize(int size);
+      void USBSID_SetDiffSize(int size);
+      void USBSID_InitRingBuffer(int buffer_size, int differ_size);
+      void USBSID_InitRingBuffer(void);
+      void USBSID_DeInitRingBuffer(void);
+      bool USBSID_IsHigher(void);
+      int USBSID_RingDiff(void);
+      void USBSID_RingPut(uint8_t item);
+      uint8_t USBSID_RingGet(void);
+      void USBSID_FlushBuffer(void);
+
+      /* Ringbuffer reads & writes*/
       void USBSID_RingPopCycled(void);  /* Threaded writer with cycles */
       void USBSID_RingPop(void);  /* Threaded writer */
       uint8_t * USBSID_RingPop(bool return_busvalue);  /* Threaded writer with return value */
-      void USBSID_FlushBuffer(void);
 
       /* SID memory ~ Unused at the moment */
       void USBSID_FlushMemory(void);
