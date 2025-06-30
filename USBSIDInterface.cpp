@@ -154,6 +154,18 @@ extern "C"
     if( p == NULL ) return;
     return ((USBSID_Class*) p)->USBSID_Flush();
   };
+  void restartringbuffer_USBSID(USBSIDitf p){
+    if( p == NULL ) return;
+    return ((USBSID_Class*) p)->USBSID_RestartRingBuffer();
+  }
+  void setbuffsize_USBSID(USBSIDitf p, int size){
+    if( p == NULL ) return;
+    return ((USBSID_Class*) p)->USBSID_SetBufferSize(size);
+  }
+  void setdiffsize_USBSID(USBSIDitf p, int size){
+    if( p == NULL ) return;
+    return ((USBSID_Class*) p)->USBSID_SetDiffSize(size);
+  }
   void restartthread_USBSID(USBSIDitf p, bool with_cycles){
     if( p == NULL ) return;
     return ((USBSID_Class*) p)->USBSID_RestartThread(with_cycles);

@@ -703,12 +703,14 @@ void USBSID_Class::USBSID_EnableThread(void)
   if (USBSID_IsRunning() != 1) {
     USBSID_InitThread();
   }
+  return;
 }
 
 void USBSID_Class::USBSID_DisableThread(void)
 {
   USBDBG(stdout, "[USBSID] Disable thread (%d)\r\n", USBSID_IsRunning());
   USBSID_StopThread();
+  return;
 }
 
 
@@ -717,6 +719,7 @@ void USBSID_Class::USBSID_DisableThread(void)
 void USBSID_Class::USBSID_ResetRingBuffer(void)
 {
   us_ringbuffer.ring_read = us_ringbuffer.ring_write = 0;
+  return;
 }
 
 void USBSID_Class::USBSID_SetBufferSize(int size)
@@ -743,6 +746,7 @@ void USBSID_Class::USBSID_InitRingBuffer(int buffer_size, int differ_size)
   us_ringbuffer.ringbuffer = us_alloc(2 * ring_size, (sizeof(uint8_t)) * ring_size);
   USBDBG(stdout, "[USBSID] Init RingBuffer with size: %d and diffsize: %d\n",
      buffer_size, differ_size);
+  return;
 }
 
 void USBSID_Class::USBSID_InitRingBuffer(void)
@@ -751,8 +755,10 @@ void USBSID_Class::USBSID_InitRingBuffer(void)
   USBSID_SetDiffSize(diff_size);
   USBSID_ResetRingBuffer();
   us_ringbuffer.ringbuffer = us_alloc(2 * ring_size, (sizeof(uint8_t)) * ring_size);
+  us_ringbuffer.is_allocated = 1;
   USBDBG(stdout, "[USBSID] Init RingBuffer with default size: %d and default diffsize: %d\n",
      ring_size, diff_size);
+  return;
 }
 
 void USBSID_Class::USBSID_DeInitRingBuffer(void)
@@ -760,7 +766,15 @@ void USBSID_Class::USBSID_DeInitRingBuffer(void)
   USBSID_ResetRingBuffer();
   USBSID_SetBufferSize(min_ring_size);
   USBSID_SetDiffSize(min_diff_size);
-  if (us_ringbuffer.ringbuffer) us_free(us_ringbuffer.ringbuffer);
+  if (us_ringbuffer.is_allocated == 1) us_free(us_ringbuffer.ringbuffer);
+  return;
+}
+
+void USBSID_Class::USBSID_RestartRingBuffer(void)
+{
+  USBSID_DeInitRingBuffer();
+  USBSID_InitRingBuffer();
+  return;
 }
 
 bool USBSID_Class::USBSID_IsHigher()
@@ -778,6 +792,7 @@ void USBSID_Class::USBSID_RingPut(uint8_t item)
 {
   us_ringbuffer.ringbuffer[us_ringbuffer.ring_write] = item;
   us_ringbuffer.ring_write = (us_ringbuffer.ring_write + 1) % ring_size;
+  return;
 }
 
 uint8_t USBSID_Class::USBSID_RingGet()

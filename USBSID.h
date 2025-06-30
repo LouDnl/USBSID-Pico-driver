@@ -167,6 +167,7 @@ namespace USBSID_NS
   typedef struct {
     int ring_read;
     int ring_write;
+    int is_allocated;
     uint8_t * __restrict__ ringbuffer;
   } ring_buffer_t;
   static ring_buffer_t us_ringbuffer;
@@ -284,8 +285,6 @@ namespace USBSID_NS
 
       /* Ringbuffer */
       void USBSID_ResetRingBuffer(void);
-      void USBSID_SetBufferSize(int size);
-      void USBSID_SetDiffSize(int size);
       void USBSID_InitRingBuffer(int buffer_size, int differ_size);
       void USBSID_InitRingBuffer(void);
       void USBSID_DeInitRingBuffer(void);
@@ -364,11 +363,16 @@ namespace USBSID_NS
       void USBSID_WriteRing(uint8_t reg, uint8_t val);                         /* Write register and value to ringbuffer, USBSID adds 10 delay cycles to each write */
       void USBSID_WriteRingCycled(uint8_t reg, uint8_t val, uint16_t cycles);  /* Write register, value, and cycles to ringbuffer */
 
-      /* Thread buffer */
+      /* Threading */
       void USBSID_EnableThread(void);   /* Enable the thread on the fly */
       void USBSID_DisableThread(void);  /* Disable the running thread and switch to non threaded and cycled on the fly */
-      void USBSID_SetFlush(void);       /* Set flush buffer flag to 1 */
-      void USBSID_Flush(void);          /* Set flush buffer flag to 1 and flushes the buffer */
+
+      /* Ringbuffer */
+      void USBSID_SetFlush(void);          /* Set flush buffer flag to 1 */
+      void USBSID_Flush(void);             /* Set flush buffer flag to 1 and flushes the buffer */
+      void USBSID_SetBufferSize(int size); /* Set the buffer size for storing writes */
+      void USBSID_SetDiffSize(int size);   /* Set the minimum size difference between head & tail */
+      void USBSID_RestartRingBuffer(void); /* Restart the ringbuffer*/
 
       /* Thread utils */
       void USBSID_RestartThread(bool with_cycles);

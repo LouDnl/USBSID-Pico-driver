@@ -79,7 +79,9 @@ extern "C" {
   void enablethread_USBSID(USBSIDitf);
   void disablethread_USBSID(USBSIDitf);
   void setflush_USBSID(USBSIDitf);
-  void flush_USBSID(USBSIDitf);
+  void restartringbuffer_USBSID(USBSIDitf);
+  void setbuffsize_USBSID(USBSIDitf, int size);
+  void setdiffsize_USBSID(USBSIDitf, int size);
 
   /* Thread utils */
   void restartthread_USBSID(USBSIDitf, bool with_cycles);
