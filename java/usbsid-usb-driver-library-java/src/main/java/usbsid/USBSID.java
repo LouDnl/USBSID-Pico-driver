@@ -32,7 +32,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
   private final int default_ring_diff = 64;
   private final int default_ring_diffwin = 64;
   private final int default_ring_size = 256;  /* Init default buffer size */
-  private final int default_ring_sizewin = 8196;  /* Init default buffer size */
+  private final int default_ring_sizewin = 8192;  /* Init default buffer size */
   private static int diff_size = 0;
   private static int ring_size = 0;
 
