@@ -607,11 +607,10 @@ void* USBSID_Class::USBSID_Thread(void)
     }
     while ((us_ringbuffer.ring_read != us_ringbuffer.ring_write)
            && (USBSID_RingDiff() > diff_size)) {
-        if (withcycles) {
-          USBSID_RingPopCycled();
-        } else {
-          USBSID_RingPop();
-        }
+      if (withcycles) {
+        USBSID_RingPopCycled();
+      } else {
+        USBSID_RingPop();
       }
     }
   }
