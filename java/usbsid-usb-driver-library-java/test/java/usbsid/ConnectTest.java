@@ -86,9 +86,9 @@ public class ConnectTest
       return;
 
     final int s1s1 = usbsid.USBSID_getsocketsidtype(1, 1, socketcfg);
-    final int s1s2 = usbsid.USBSID_getsocketsidtype(1, 2, socketcfg);
-    final int s2s1 = usbsid.USBSID_getsocketsidtype(2, 1, socketcfg);
-    final int s2s2 = usbsid.USBSID_getsocketsidtype(2, 2, socketcfg);
+    final int s1s2 = (numsids > 1) ? usbsid.USBSID_getsocketsidtype(1, 2, socketcfg) : 0;
+    final int s2s1 = (numsids > 2) ? usbsid.USBSID_getsocketsidtype(2, 1, socketcfg) : 0;
+    final int s2s2 = (numsids > 3) ? usbsid.USBSID_getsocketsidtype(2, 2, socketcfg) : 0;
     if (checkforError(() -> s1s1 != -1, MessageFormat.format("Socket one sid one type read: {0}", s1s1)))
       return;
     if (checkforError(() -> s1s2 != -1, MessageFormat.format("Socket one sid two type read: {0}", s1s2)))
@@ -99,9 +99,9 @@ public class ConnectTest
       return;
 
     final int sid1 = usbsid.USBSID_sidtypebysidno(0, socketcfg);
-    final int sid2 = usbsid.USBSID_sidtypebysidno(1, socketcfg);
-    final int sid3 = usbsid.USBSID_sidtypebysidno(2, socketcfg);
-    final int sid4 = usbsid.USBSID_sidtypebysidno(3, socketcfg);
+    final int sid2 = (numsids > 1) ? usbsid.USBSID_sidtypebysidno(1, socketcfg) : 0;
+    final int sid3 = (numsids > 2) ? usbsid.USBSID_sidtypebysidno(2, socketcfg) : 0;
+    final int sid4 = (numsids > 3) ? usbsid.USBSID_sidtypebysidno(3, socketcfg) : 0;
     if (checkforError(() -> (sid1 != -1 && sid2 != -1 && sid3 != -1 && sid4 != -1),
       MessageFormat.format("SID type by sidno: SID1 {0}, SID2 {1}, SID3 {2}, SID4 {3}", sid1, sid2, sid3, sid4)))
       return;
