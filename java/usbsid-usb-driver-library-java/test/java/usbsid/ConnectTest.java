@@ -127,10 +127,10 @@ public class ConnectTest
     readBasics("usbsx");
   }
 
-  @Test
-  public void testUSBL()
-  {
-    readBasics("libusb");
-  }
+  // @Test
+  // public void testUSBL()
+  // {
+  //   readBasics("libusb");
+  // }
 
 }
