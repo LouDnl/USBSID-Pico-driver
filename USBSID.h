@@ -312,6 +312,9 @@ namespace USBSID_NS
       /* USBSID */
       int USBSID_Init(bool start_threaded, bool with_cycles);
       int USBSID_Close(void);
+      bool USBSID_isOpen(void);
+
+      /* USBSID & SID control */
       void USBSID_Pause(void);                                            /* Pause playing by releasing chipselect pins */
       void USBSID_Reset(void);                                            /* Reset all SID chips */
       void USBSID_ResetAllRegisters(void);                                /* Reset register for all SID chips */

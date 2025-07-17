@@ -126,6 +126,11 @@ int USBSID_Class::USBSID_Close(void)
   return 0;
 }
 
+bool USBSID_Class::USBSID_isOpen(void)
+{
+  return us_PortIsOpen;
+}
+
 void USBSID_Class::USBSID_Pause(void)
 {
   USBDBG(stdout, "[USBSID] Pause\r\n");
