@@ -40,7 +40,6 @@
 #pragma GCC diagnostic ignored "-Wunused-variable"
 
 #ifdef __cplusplus
-  #include <cstdbool>
   #include <cstdint>
   #include <cstdio>
   #include <cstdlib>
