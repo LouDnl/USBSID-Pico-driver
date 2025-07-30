@@ -64,8 +64,6 @@ extern "C" {
 /* USBSID */
 
 USBSID_Class::USBSID_Class() :
-  us_Available(false),
-  us_Initialised(false),
   us_Found(0),
   us_InstanceID(0)
 {
@@ -124,11 +122,6 @@ int USBSID_Class::USBSID_Close(void)
   if (us_PortIsOpen) us_PortIsOpen = false;
   USBDBG(stdout, "[USBSID] De-init finished\n");
   return 0;
-}
-
-bool USBSID_Class::USBSID_isOpen(void)
-{
-  return us_PortIsOpen;
 }
 
 void USBSID_Class::USBSID_Pause(void)
