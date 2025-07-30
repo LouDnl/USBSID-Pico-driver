@@ -19,8 +19,11 @@
 !README.md
 !LICENSE
 !javax.usb.properties
+!testbuild.sh
 
 # Not these directories and their contents
+!build
+!build/**
 !java
 !java/usbsid-usb-driver-library-java/
 !java/usbsid-usb-driver-library-java/lib
