@@ -259,6 +259,8 @@ namespace USBSID_NS
   class USBSID_Class {
     private:
 
+      int us_InstanceID;
+
       /* LIBUSB */
       int LIBUSB_Setup(bool start_threaded, bool with_cycles);
       int LIBUSB_Exit(void);
