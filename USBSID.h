@@ -7,7 +7,7 @@
  * This file is part of USBSID-Pico (https://github.com/LouDnl/USBSID-Pico-driver)
  * File author: LouD
  *
- * Copyright (c) 2024 LouD
+ * Copyright (c) 2024-2025 LouD
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,10 +32,24 @@
   #define __US_WINDOWS_COMPILE
 #endif
 
-#ifdef USBSID_OPTOFF
-#pragma GCC push_options
-#pragma GCC optimize ("O0")
+#if defined(__US_WINDOWS_COMPILE)
+  #ifndef WINAPI
+    #if defined(_ARM_)
+      #define WINAPI
+    #else
+      #define WINAPI __stdcall
+    #endif
+  #endif
 #endif
+
+#ifndef LIBUSB_CALL
+  #if defined(_WIN32) || defined(__CYGWIN__)
+    #define LIBUSB_CALL WINAPI
+  #else
+    #define LIBUSB_CALL
+  #endif
+#endif
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
 
@@ -55,7 +69,6 @@
   #include <pthread.h>
 #endif
 
-#include <libusb.h>
 
 /* Optional driver start and driver exit commands
  *
@@ -82,6 +95,10 @@
 #define USBERR(...) fprintf(__VA_ARGS__)
 
 using namespace std;
+
+/* Pre-define libusb structs */
+struct libusb_context;
+struct libusb_transfer;
 
 namespace USBSID_NS
 {
@@ -388,6 +405,7 @@ namespace USBSID_NS
   };
 
 } /* USBSIDDriver */
+
 
 #ifdef USBSID_OPTOFF
 #pragma GCC diagnostic pop

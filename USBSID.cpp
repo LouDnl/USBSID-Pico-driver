@@ -7,7 +7,7 @@
  * This file is part of USBSID-Pico (https://github.com/LouDnl/USBSID-Pico-driver)
  * File author: LouD
  *
- * Copyright (c) 2024 LouD
+ * Copyright (c) 2024-2025 LouD
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,11 +23,7 @@
  *
  */
 
-#ifdef USBSID_OPTOFF
-#pragma GCC push_options
-#pragma GCC optimize ("O0")
-#endif
-
+#include <libusb.h>
 #include "USBSID.h"
 
 
@@ -1349,7 +1345,3 @@ void LIBUSB_CALL USBSID_Class::usb_in(struct libusb_transfer *transfer)
 
 
 } /* extern "C" */
-
-#ifdef USBSID_OPTOFF
-#pragma GCC pop_options
-#endif
