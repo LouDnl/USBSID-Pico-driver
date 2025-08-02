@@ -60,8 +60,8 @@ extern "C" {
 /* USBSID */
 
 USBSID_Class::USBSID_Class() :
-  us_Found(0),
-  us_InstanceID(0)
+  us_InstanceID(0),
+  us_Found(0)
 {
   USBDBG(stdout, "[USBSID] Driver init start\n");
 
