@@ -10,6 +10,10 @@
 !*.jar
 !*.java
 !*.js
+!*.css
+!*.wasm
+!*.html
+!*.py
 !*.am
 !*.xml
 !*.md
@@ -47,7 +51,7 @@
 !emscripten/build
 !emscripten/src
 !emscripten/htdocs
-!emscripten/example
+!emscripten/libusbexample
 # files
 !emscripten/Makefile
 !emscripten/buildemscripten.sh
