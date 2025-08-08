@@ -40,3 +40,14 @@
 !vice-makefile/*
 !webusb
 !webusb/*
+
+# Not emscripten test stuff
+# directories
+!emscripten
+!emscripten/build
+!emscripten/src
+!emscripten/htdocs
+!emscripten/example
+# files
+!emscripten/Makefile
+!emscripten/buildemscripten.sh
