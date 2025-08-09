@@ -60,6 +60,7 @@
   #include <cstring>
   #include <chrono>
   #include <thread>
+  #include <atomic>
 #else
   #include <stdbool.h>
   #include <stdint.h>
@@ -67,6 +68,7 @@
   #include <stdlib.h>
   #include <string.h>
   #include <pthread.h>
+  #include <stdatomic.h>
 #endif
 
 
@@ -271,7 +273,11 @@ namespace USBSID_NS
   static timestamp_t m_StartTime   = std::chrono::high_resolution_clock::now();
   static timestamp_t m_LastTime    = m_StartTime;
 
-  static volatile int us_thread = 0;
+  #ifdef __cplusplus
+  static std::atomic_int us_thread(0);
+  #else
+  static _Atomic int us_thread = 0;
+  #endif
   static pthread_mutex_t us_mutex;
   class USBSID_Class {
     private:
