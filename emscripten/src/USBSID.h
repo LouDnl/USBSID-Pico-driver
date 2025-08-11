@@ -54,9 +54,14 @@
   #include <emscripten.h>
   #ifdef __cplusplus
     #define EXTERN extern "C"
+    #define NOINLINE __attribute__ ((noinline))
+  #else
+    #define EXTERN
+    #define NOINLINE
   #endif
 #else
   #define EXTERN
+  #define NOINLINE
   #define EMSCRIPTEN_KEEPALIVE
 #endif
 
@@ -70,6 +75,7 @@
   #include <cstring>
   #include <chrono>
   #include <thread>
+  #include <atomic>
   #include <limits.h>
 #else
   #include <stdbool.h>
@@ -78,9 +84,13 @@
   #include <stdlib.h>
   #include <string.h>
   #include <pthread.h>
+  #include <stdatomic.h>
   #include <limits.h>
 #endif
 
+#ifdef __cplusplus
+#define _Atomic(T) std::atomic<T>
+#endif
 
 /* Optional driver start and driver exit commands
  *
@@ -98,7 +108,8 @@
 
 
 /* Uncomment for debug logging */
-#define USBSID_DEBUG
+// #define USBSID_DEBUG
+
 #ifndef EMSCRIPTEN
   #ifdef USBSID_DEBUG
     #define USBDBG(...) fprintf(stdout,__VA_ARGS__)
@@ -145,9 +156,6 @@ namespace USBSID_NS
     EP_IN_ADDR     = EPIN,
     LEN_IN_BUFFER  = 1,
     LEN_OUT_BUFFER = 64,
-    #ifdef DEBUG_USBSID_MEMORY
-    LEN_TMP_BUFFER = 4
-    #endif
   };
 
   enum {
@@ -174,18 +182,11 @@ namespace USBSID_NS
   /* Thread related */
   static int run_thread;
 
-  /* Fake C64 Memory */
-  #ifdef DEBUG_USBSID_MEMORY
-  static uint8_t sid_memory[0x20];
-  static uint8_t sid_memory_changed[0x20];
-  static uint16_t sid_memory_cycles[0x20];
-  #endif
-
   /* LIBUSB related */
-  static struct libusb_device_handle *devh = NULL;
-  static struct libusb_transfer *transfer_out = NULL;  /* OUT-going transfers (OUT from host PC to USB-device) */
-  static struct libusb_transfer *transfer_in = NULL;  /* IN-coming transfers (IN to host PC from USB-device) */
-  static libusb_context *ctx = NULL;
+  static struct libusb_device_handle *devh __attribute__((used)) = NULL;
+  static struct libusb_transfer *transfer_out __attribute__((used)) = NULL;  /* OUT-going transfers (OUT from host PC to USB-device) */
+  static struct libusb_transfer *transfer_in __attribute__((used)) = NULL;  /* IN-coming transfers (IN to host PC from USB-device) */
+  static libusb_context * ctx __attribute__((used)) = NULL;
   static bool in_buffer_dma = false;
   static bool out_buffer_dma = false;
 
@@ -198,9 +199,6 @@ namespace USBSID_NS
   static uint8_t * __restrict__ out_buffer;    /* outgoing libusb will reside in this buffer */
   static uint8_t * __restrict__ thread_buffer; /* data to be transfered to the out_buffer will reside in this buffer */
   static uint8_t * __restrict__ write_buffer;  /* non async data will be written from this buffer */
-  #ifdef DEBUG_USBSID_MEMORY
-  static uint8_t * __restrict__ temp_buffer;   /* temp buffer for debug printing */
-  #endif
   static uint8_t * __restrict__ result;        /* variable where read data is copied into */
   static int len_out_buffer;      /* changable variable for out buffer size */
   static int buffer_pos = 1;      /* current position of the out buffer */
@@ -301,8 +299,13 @@ namespace USBSID_NS
   static timestamp_t m_StartTime   = std::chrono::high_resolution_clock::now();
   static timestamp_t m_LastTime    = m_StartTime;
 
+  #ifdef __cplusplus
+  static std::atomic_int us_thread(0);
+  #else
   static _Atomic int us_thread = 0;
+  #endif
   static pthread_mutex_t us_mutex;
+
   class USBSID_Class {
     private:
 
