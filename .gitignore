@@ -40,8 +40,8 @@
 !java/usbsid-usb-driver-library-java/resources/javax.usb.properties
 !java/usbsid-usb-driver-library-java/resources/logging.properties
 !java/usbsid-usb-driver-library-java/target/
-!vice-makefile
-!vice-makefile/*
+!libusbsiddrv-vice
+!libusbsiddrv-vice/*
 !webusb
 !webusb/*
 
