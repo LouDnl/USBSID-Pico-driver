@@ -335,6 +335,7 @@ namespace USBSID_NS
       /* USBSID */
       int USBSID_Init(bool start_threaded, bool with_cycles);
       int USBSID_Close(void);
+      int USBSID_GetInstanceID(void){ return us_InstanceID; };
       bool USBSID_isInitialised(void){ return us_Initialised; };
       bool USBSID_isAvailable(void){ return us_Available; };
       bool USBSID_isOpen(void){ return us_PortIsOpen; };
