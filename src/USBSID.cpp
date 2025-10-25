@@ -654,6 +654,7 @@ int USBSID_Class::USBSID_InitThread(void)
   /* Init ringbuffer */
   flush_buffer = 0;
   run_thread = buffer_pos = 1;
+  threaded = withcycles = true;
   pthread_mutex_lock(&us_mutex);
   USBSID_InitRingBuffer(ring_size, diff_size);
   us_thread++;
@@ -1239,7 +1240,7 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
 
   /* Check for an available USBSID-Pico */
   if (LIBUSB_Available(ctx, VENDOR_ID, PRODUCT_ID) <= 0) {
-    USBERR(stderr, "[USBSID] No USBSID-Pico found, is the device plugged in?\n");
+    USBERR(stderr, "[USBSID] USBSID-Pico not connected\n");
     goto out;
   }
 
