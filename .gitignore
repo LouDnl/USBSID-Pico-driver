@@ -26,6 +26,10 @@
 !testbuild.sh
 
 # Not these directories and their contents
+!src
+!src/**
+!test
+!test/**
 !build
 !build/**
 !java
