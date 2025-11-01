@@ -24,6 +24,7 @@
  */
 
 #include <libusb.h>
+#include <time.h>
 #include "USBSID.h"
 
 
@@ -97,6 +98,7 @@ int USBSID_Class::USBSID_Init(bool start_threaded, bool with_cycles)
       if (threaded) {
         rc = USBSID_InitThread();
       }
+      USBSID_GetClockRate();  /* Once on init */
       us_PortIsOpen = true;
       return rc;
     } else {
@@ -137,6 +139,8 @@ void USBSID_Class::USBSID_Reset(void)
   USBDBG(stdout, "[USBSID] Reset\r\n");
   unsigned char buff[3] = {(COMMAND << 6 | RESET_SID), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
+  flush_buffer = 1;
+  USBSID_SyncTime();
   return;
 }
 
@@ -213,6 +217,7 @@ void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles, bool suspend_sids)
         uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x50, i, (uint8_t)(suspend_sids == true ? 1 : 0), 0, 0};
         USBSID_SingleWrite(configbuff, 6);
       }
+      USBSID_SyncTime();
       return;
     }
   }
@@ -227,6 +232,7 @@ long USBSID_Class::USBSID_GetClockRate(void)
     us_CPUcycleDuration = ratio_t::den / (float)cycles_per_sec;
     return cycles_per_sec;
   } else if (clk_retrieved == 0) {
+    USBSID_SyncTime();
     uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x57, 0, 0, 0, 0};
     USBSID_SingleWrite(configbuff, 6);
     us_clkrate = clockSpeed[USBSID_SingleReadConfig(result, 1)];
@@ -829,6 +835,7 @@ void USBSID_Class::USBSID_Flush(void)
 
 void USBSID_Class::USBSID_SetFlush(void)
 {
+  USBSID_SyncTime();
   flush_buffer = 1;
   return;
 }
@@ -967,37 +974,72 @@ uint8_t USBSID_Class::USBSID_Address(uint16_t addr)
 
 /* TIMING AND CYCLES */
 
-uint_fast64_t USBSID_Class::USBSID_CycleFromTimestamp(timestamp_t timestamp)
+void USBSID_Class::USBSID_SyncTime(void)
 {
-  if (!us_Initialised) return 0;
-  USBSID_GetClockRate();  /* Make sure we use the right clockrate */
-  us_InvCPUcycleDurationNanoSeconds = 1.0 / (ratio_t::den / (float)cycles_per_sec);
-  auto nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(timestamp - m_StartTime);
-  return (int_fast64_t)((double)nsec.count() * us_InvCPUcycleDurationNanoSeconds);
+  if (!us_Initialised) return;
+  m_LastTime = std::chrono::steady_clock::now();// - m_StartTime);
 }
 
+uint_fast64_t USBSID_Class::USBSID_WaitForCycle_(uint_fast16_t cycles)
+{
+  long duration = (long)(cycles * us_CPUcycleDuration);
+  auto duration_ns = duration_t(duration);
+  auto start = std::chrono::steady_clock::now();
+  auto target_time = (m_LastTime + duration_ns);
+
+  auto end = std::chrono::steady_clock::now();
+  do {
+    end = std::chrono::steady_clock::now();
+  } while (end < target_time);
+
+  USBDBG(stdout,"[%d][LT]%ld[END]%ld[DUR]%ld[C]%lu[ACTUAL]%lld\n",
+    us_InstanceID,
+    m_LastTime,end,
+    duration_ns,
+    cycles,
+    static_cast<long long>(std::chrono::duration_cast<duration_t>(end - start).count())
+  );
+  m_LastTime = end;
+  return 0;
+}
+
+/* WORKS */
 uint_fast64_t USBSID_Class::USBSID_WaitForCycle(uint_fast16_t cycles)
-{ /* Returns the waited microseconds since last target time ~ not the actual cycles */
-  if (!us_Initialised) return 0;
-  USBSID_GetClockRate();  /* Make sure we use the right clockrate */
-  timestamp_t now = std::chrono::high_resolution_clock::now();
-  double dur = (double)cycles * us_CPUcycleDuration;  /* duration in nanoseconds */
-  duration_t duration = (duration_t)(int_fast64_t)dur; /* equals dur but as chrono nanoseconds */
-  auto target_time = m_LastTime + duration;  /* ns to wait since m_LastTime (now + duration for actual wait time) */
-  // auto target_time = now + duration;  /* ns to wait since m_LastTime (now + duration for actual wait time) */
-  auto target_delta = target_time - now;
-  auto wait_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(target_delta);
-  // auto wait_usec = std::chrono::duration_cast<std::chrono::microseconds>(target_delta);
-  if (wait_nsec.count() > 0) {
-      std::this_thread::sleep_for(wait_nsec);
-  }
-  m_LastTime = target_time;
-  /* int_fast64_t waited_cycles = wait_usec.count(); */
-  int_fast64_t waited_cycles = (int_fast64_t)((double)wait_nsec.count() * us_InvCPUcycleDurationNanoSeconds);
-  // USBDBG(stdout, "[C] %ld [WC] %ld [us] %ld [ns] %ld [ts] %lu\n",
-  //   cycles, waited_cycles, wait_usec.count(), wait_nsec.count(), USBSID_CycleFromTimestamp(now));
-  // return (wait_nsec.count() > 0) ? waited_cycles : 0;
-  return waited_cycles;
+{
+  auto start = std::chrono::steady_clock::now();
+  auto duration_ns = duration_t((long)(cycles * us_CPUcycleDuration));
+  auto target_time = (start + duration_ns);
+
+  // auto end = std::chrono::steady_clock::now();
+  // do {
+  //   end = std::chrono::steady_clock::now();
+  // } while (end < target_time);
+  // } while (target_time > end);
+
+  // while (target_time >= end) {
+  //   end = std::chrono::steady_clock::now();
+  // }
+
+  // while (target_time > std::chrono::steady_clock::now()) {};
+
+  do {
+  } while (std::chrono::steady_clock::now() <= target_time);
+
+  // for (;;) {
+  //   if (std::chrono::steady_clock::now() < target_time) continue;
+  //   else break;
+  // };
+
+  auto end = std::chrono::steady_clock::now();
+  auto actual_ns = static_cast<long long>(std::chrono::duration_cast<duration_t>(end - start).count());
+
+  USBDBG(stdout,"[%d][DUR]%ld [C]%lu [ACTUAL]%lld\n",
+    us_InstanceID,
+    duration_ns,
+    cycles,
+    actual_ns
+  );
+  return (uint_fast64_t)actual_ns;
 }
 
 

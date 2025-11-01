@@ -265,13 +265,13 @@ namespace USBSID_NS
   static int instance = -1;
 
   /* Timing related */
-  typedef std::nano                                      ratio_t;      /* 1000000000 */
-  typedef std::chrono::high_resolution_clock::time_point timestamp_t;  /* Point in time */
-  typedef std::chrono::nanoseconds                       duration_t;   /* Duration in nanoseconds */
-  static double us_CPUcycleDuration               = ratio_t::den / (float)cycles_per_sec;          /* CPU cycle duration in nanoseconds */
+  typedef std::nano                               ratio_t;      /* 1000000000 */
+  typedef std::chrono::steady_clock::time_point   timestamp_t;  /* Point in time */
+  typedef std::chrono::nanoseconds                duration_t;   /* Duration in nanoseconds */
+  static double us_CPUcycleDuration               = ratio_t::den / (float)cycles_per_sec;  /* CPU cycle duration in nanoseconds */
   static double us_InvCPUcycleDurationNanoSeconds = 1.0 / (ratio_t::den / (float)cycles_per_sec);  /* Inverted CPU cycle duration in nanoseconds */
-  static timestamp_t m_StartTime   = std::chrono::high_resolution_clock::now();
-  static timestamp_t m_LastTime    = m_StartTime;
+  static timestamp_t m_StartTime                  = std::chrono::steady_clock::now();  /* That moment when... */
+  static timestamp_t m_LastTime                   = m_StartTime;  /* I know what you did last summer! */
 
   #ifdef __cplusplus
   static std::atomic_int us_thread(0);
@@ -403,8 +403,9 @@ namespace USBSID_NS
       }
 
       /* Timing and cycles */
-      uint_fast64_t USBSID_WaitForCycle(uint_fast16_t cycles);         /* Sleep for n cycles */
-      uint_fast64_t USBSID_CycleFromTimestamp(timestamp_t timestamp);  /* Returns cycles since m_StartTime */
+      uint_fast64_t USBSID_WaitForCycle(uint_fast16_t cycles);   /* Sleep for n cycles */
+      uint_fast64_t USBSID_WaitForCycle_(uint_fast16_t cycles);  /* Sleep for n cycles ~ deprecated */
+      void USBSID_SyncTime(void);                                /* Sync time for cycle delay function */
 
       /* Utils */
       /* TODO: Deprecate this function, emulator/player should handle this */
