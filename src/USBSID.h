@@ -188,8 +188,8 @@ namespace USBSID_NS
   static ring_buffer_t us_ringbuffer;
   const int min_diff_size = 16;
   const int min_ring_size = 256;
-  static int diff_size = 64;
-  static int ring_size = 8192;
+  const int default_diff_size = 64;
+  const int default_ring_size = 8192;
 
   /* Clock cycles per second
    * Clock speed: 0.985 MHz (PAL) or 1.023 MHz (NTSC)
@@ -259,19 +259,13 @@ namespace USBSID_NS
   static int socketconfig = -1;
 
   /* Object related */
-  static bool us_Initialised = false;
-  static bool us_Available = false;
-  static bool us_PortIsOpen = false;
+  static int us_Found = 0;
   static int instance = -1;
 
   /* Timing related */
   typedef std::nano                               ratio_t;      /* 1000000000 */
   typedef std::chrono::steady_clock::time_point   timestamp_t;  /* Point in time */
   typedef std::chrono::nanoseconds                duration_t;   /* Duration in nanoseconds */
-  static double us_CPUcycleDuration               = ratio_t::den / (float)cycles_per_sec;  /* CPU cycle duration in nanoseconds */
-  static double us_InvCPUcycleDurationNanoSeconds = 1.0 / (ratio_t::den / (float)cycles_per_sec);  /* Inverted CPU cycle duration in nanoseconds */
-  static timestamp_t m_StartTime                  = std::chrono::steady_clock::now();  /* That moment when... */
-  static timestamp_t m_LastTime                   = m_StartTime;  /* I know what you did last summer! */
 
   #ifdef __cplusplus
   static std::atomic_int us_thread(0);
@@ -282,7 +276,21 @@ namespace USBSID_NS
   class USBSID_Class {
     private:
 
+      /* Driver related */
+      static bool us_Initialised;
+      static bool us_Available;
+      static bool us_PortIsOpen;
       int us_InstanceID;
+
+      /* Timing related */
+      static double us_CPUcycleDuration;  /* CPU cycle duration in nanoseconds */
+      static double us_InvCPUcycleDurationNanoSeconds;  /* Inverted CPU cycle duration in nanoseconds */
+      static timestamp_t m_StartTime;  /* That moment when... */
+      static timestamp_t m_LastTime;  /* I know what you did last summer! */
+
+      /* Ringbuffer related */
+      static int diff_size;
+      static int ring_size;
 
       /* LIBUSB */
       int LIBUSB_Setup(bool start_threaded, bool with_cycles);
@@ -329,8 +337,6 @@ namespace USBSID_NS
 
       USBSID_Class();   /* Constructor */
       ~USBSID_Class();  /* Deconstructor */
-
-      int us_Found;
 
       /* USBSID */
       int USBSID_Init(bool start_threaded, bool with_cycles);
