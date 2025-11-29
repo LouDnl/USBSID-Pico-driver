@@ -59,7 +59,7 @@ extern "C" {
   bool initialised_USBSID(USBSIDitf);
   bool available_USBSID(USBSIDitf);
   bool portisopen_USBSID(USBSIDitf);
-  int found_USBSID(USBSIDitf);
+  // int found_USBSID(USBSIDitf);
 
   /* Synchronous direct */
   void writesingle_USBSID(USBSIDitf, unsigned char *buff, int len);

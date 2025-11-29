@@ -113,10 +113,10 @@ extern "C"
     /* No check here, can be called without connection */
     return ((USBSID_Class*)p)->USBSID_isOpen();
   }
-  int found_USBSID(USBSIDitf p) {
-    if( p == NULL ) return -1;
-    return ((USBSID_Class*)p)->us_Found;
-  }
+  // int found_USBSID(USBSIDitf p) {
+  //   if( p == NULL ) return -1;
+  //   return ((USBSID_Class*)p)->us_Found;
+  // }
   void writesingle_USBSID(USBSIDitf p, unsigned char *buff, int len){
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_SingleWrite(buff, len);
