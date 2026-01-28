@@ -32,22 +32,33 @@
   #define __US_WINDOWS_COMPILE
 #endif
 
+/**
+ * @brief Fix for CLANG64 and CLANGARM64 builds
+ * @ref https://github.com/LouDnl/USBSID-Pico-driver/issues/11
+ * @ref https://github.com/msys2/MINGW-packages/actions/runs/21104083635
+ */
 #if defined(__US_WINDOWS_COMPILE)
-  #ifndef WINAPI
-    #if defined(_ARM_)
-      #define WINAPI
-    #else
+  /* Detect ARM64 across various compiler defines */
+  #if defined(__aarch64__) || defined(_M_ARM64) || defined(__arm__) || defined(_M_ARM) || defined(_ARM_)
+    /* libusb on Windows typically expects WINAPI (stdcall) on x86,
+       but Clang on ARM64 must treat this as empty. */
+    #undef WINAPI
+    #define WINAPI
+    #undef LIBUSB_CALL
+    #define LIBUSB_CALL
+  #else
+    #ifndef WINAPI
       #define WINAPI __stdcall
+    #endif
+    #ifndef LIBUSB_CALL
+      #define LIBUSB_CALL WINAPI
     #endif
   #endif
 #endif
 
+/* Fallback for other platforms */
 #ifndef LIBUSB_CALL
-  #if defined(_WIN32) || defined(__CYGWIN__)
-    #define LIBUSB_CALL WINAPI
-  #else
-    #define LIBUSB_CALL
-  #endif
+  #define LIBUSB_CALL
 #endif
 
 #pragma GCC diagnostic push
@@ -69,6 +80,17 @@
   #include <string.h>
   #include <pthread.h>
   #include <stdatomic.h>
+#endif
+
+/**
+ * @brief Fix for CLANG64 and CLANGARM64 builds
+ * @ref https://github.com/LouDnl/USBSID-Pico-driver/issues/11
+ * @ref https://github.com/msys2/MINGW-packages/actions/runs/21104083635
+ */
+#if defined(__clang__) && defined(__MINGW32__)
+  #if defined(__x86_64__) || defined(__aarch64__)
+    #include <pthread.h>
+  #endif
 #endif
 
 
