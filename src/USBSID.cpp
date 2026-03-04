@@ -339,14 +339,16 @@ int USBSID_Class::USBSID_GetSocketSIDType1(int socket, uint8_t socket_config[])
   if (!us_PortIsOpen) return 1; /* N/A */
   switch (socket) {
     case 1:
-      if (((socket_config[2] & 0xF0) >> 4) == 1) {
+      // if (((socket_config[2] & 0xF0) >> 4) == 1) {
+      if ((socket_config[2] & 0xF0) == 0x10) {
         return ((socket_config[4] & 0xF0) >> 4);
       } else {
         return 1; /* N/A */
       }
       break;
     case 2:
-      if (((socket_config[5] & 0xF0) >> 4) == 1) {
+      // if (((socket_config[5] & 0xF0) >> 4) == 1) {
+      if ((socket_config[5] & 0xF0) == 0x10) {
         return ((socket_config[7] & 0xF0) >> 4);
       } else {
         return 1; /* N/A */
@@ -363,14 +365,16 @@ int USBSID_Class::USBSID_GetSocketSIDType2(int socket, uint8_t socket_config[])
   if (!us_PortIsOpen) return 1; /* N/A */
   switch (socket) {
     case 1:
-      if ((((socket_config[2] & 0xF0) >> 4) == 1) && ((socket_config[2] & 0xF) == 1)) {
-        return ((socket_config[4] & 0xF) >> 4);
+      // if ((((socket_config[2] & 0xF0) >> 4) == 1) && ((socket_config[2] & 0xF) == 1)) {
+      if (socket_config[2] == 0x11) {
+        return (socket_config[4] & 0xF);
       } else {
         return 1; /* N/A */
       }
       break;
     case 2:
-      if ((((socket_config[5] & 0xF0) >> 4) == 1) && ((socket_config[5] & 0xF) == 1)) {
+      // if ((((socket_config[5] & 0xF0) >> 4) == 1) && ((socket_config[5] & 0xF) == 1)) {
+      if (socket_config[5] == 0x11) {
         return (socket_config[7] & 0xF);
       } else {
         return 1; /* N/A */
