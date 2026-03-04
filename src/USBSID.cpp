@@ -282,7 +282,7 @@ uint8_t* USBSID_Class::USBSID_GetSocketConfig(uint8_t socket_config[])
     USBSID_SingleReadConfig(socket_buff, SOCKET_BUFFER_SIZE);
     if (socket_buff[0] == 0x37
       && socket_buff[1] == 0x7F
-      && socket_buff[9] == 0xFF) {
+      && socket_buff[SOCKET_BUFFER_SIZE - 1] == 0xFF) {
       memcpy(socket_config, socket_buff, SOCKET_BUFFER_SIZE);
       return socket_config;
     } else {
@@ -319,56 +319,65 @@ int USBSID_Class::USBSID_GetSocketNumSIDS(int socket, uint8_t socket_config[])
 };
 
 int USBSID_Class::USBSID_GetSocketChipType(int socket, uint8_t socket_config[])
-{ /* TODO: FINISH */
-  if (!us_PortIsOpen) return 0;
+{
+  if (!us_PortIsOpen) return 1; /* Unknown */
+  switch (socket) {
+    case 1:
+      return (socket_config[3] & 0xF);
+    case 2:
+      return (socket_config[6] & 0xF);
+      break;
+    default:
+      return 1; /* Unknown */
+  }
   return 0;
 };
 
 /* 0 = unknown, 1 = N/A, 2 = MOS8085, 3 = MOS6581, 4 = FMopl */
 int USBSID_Class::USBSID_GetSocketSIDType1(int socket, uint8_t socket_config[])
 {
-  if (!us_PortIsOpen) return 0;
+  if (!us_PortIsOpen) return 1; /* N/A */
   switch (socket) {
     case 1:
       if (((socket_config[2] & 0xF0) >> 4) == 1) {
         return ((socket_config[4] & 0xF0) >> 4);
       } else {
-        return 1;
+        return 1; /* N/A */
       }
       break;
     case 2:
       if (((socket_config[5] & 0xF0) >> 4) == 1) {
         return ((socket_config[7] & 0xF0) >> 4);
       } else {
-        return 1;
+        return 1; /* N/A */
       }
       break;
     default:
-      return 1;
+      return 1; /* N/A */
   }
 };
 
 /* 0 = unknown, 1 = N/A, 2 = MOS8085, 3 = MOS6581, 4 = FMopl */
 int USBSID_Class::USBSID_GetSocketSIDType2(int socket, uint8_t socket_config[])
 {
-  if (!us_PortIsOpen) return 0;
+  if (!us_PortIsOpen) return 1; /* N/A */
   switch (socket) {
     case 1:
       if ((((socket_config[2] & 0xF0) >> 4) == 1) && ((socket_config[2] & 0xF) == 1)) {
         return ((socket_config[4] & 0xF) >> 4);
       } else {
-        return 1;
+        return 1; /* N/A */
       }
       break;
     case 2:
       if ((((socket_config[5] & 0xF0) >> 4) == 1) && ((socket_config[5] & 0xF) == 1)) {
         return (socket_config[7] & 0xF);
       } else {
-        return 1;
+        return 1; /* N/A */
       }
       break;
     default:
-      return 1;
+      return 1; /* N/A */
   }
 };
 
