@@ -271,24 +271,6 @@ long USBSID_Class::USBSID_GetRasterRate(void)
   return cycles_per_raster;
 }
 
-/* Socket config array
- * 0 = Initiator
- * 1 = Verification
- * 2 HiByte = socketOne enabled
- * 2 LoByte = socketOne dualsid
- * 3 HiByte = socketOne chipType
- * 3 LoByte = socketOne cloneType
- * 4 HiByte = socketOne sid1Type
- * 4 LoByte = socketOne sid2Type
- * 5 HiByte = socketTwo enabled
- * 5 LoByte = socketTwo dualsid
- * 6 HiByte = socketTwo chipType
- * 6 LoByte = socketTwo cloneType
- * 7 HiByte = socketTwo sid1Type
- * 7 LoByte = socketTwo sid2Type
- * 8 = socketTwo mirror socketOne
- * 9 = Terminator
- */
 uint8_t* USBSID_Class::USBSID_GetSocketConfig(uint8_t socket_config[])
 {
   if (!us_PortIsOpen) return NULL;
@@ -296,12 +278,12 @@ uint8_t* USBSID_Class::USBSID_GetSocketConfig(uint8_t socket_config[])
     socketconfig = 1;
     uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x37, 0, 0, 0, 0};
     USBSID_SingleWrite(configbuff, 6);
-    uint8_t socket_buff[10];
-    USBSID_SingleReadConfig(socket_buff, 10);
+    uint8_t socket_buff[SOCKET_BUFFER_SIZE];
+    USBSID_SingleReadConfig(socket_buff, SOCKET_BUFFER_SIZE);
     if (socket_buff[0] == 0x37
       && socket_buff[1] == 0x7F
       && socket_buff[9] == 0xFF) {
-      memcpy(socket_config, socket_buff, 10);
+      memcpy(socket_config, socket_buff, SOCKET_BUFFER_SIZE);
       return socket_config;
     } else {
       socketconfig = -1;
@@ -955,42 +937,6 @@ void USBSID_Class::USBSID_RingPop(void)
     memset(out_buffer, 0, len_out_buffer);
   }
   return;
-}
-
-
-/* BUS */
-
-uint8_t USBSID_Class::USBSID_Address(uint16_t addr)
-{ /* Unused at the moment */
-  enum {
-    SIDUMASK = 0xFF00,
-    SIDLMASK = 0xFF,
-    SID1ADDR = 0xD400,
-    SID1MASK = 0x1F,
-    SID2ADDR = 0xD420,
-    SID2MASK = 0x3F,
-    SID3ADDR = 0xD440,
-    SID3MASK = 0x5F,
-    SID4ADDR = 0xD460,
-    SID4MASK = 0x7F,
-  };
-  /* Set address for SID no# */
-  /* D500, DE00 or DF00 is the second sid in SIDTYPE1, 3 & 4 */
-  /* D500, DE00 or DF00 is the third sid in all other SIDTYPE */
-  static uint8_t a;
-  switch (addr) {
-    case 0xD400 ... 0xD499:
-      a = (uint8_t)(addr & SIDLMASK); /* $D400 -> $D479 1, 2, 3 & 4 */
-      break;
-    case 0xD500 ... 0xD599:
-    case 0xDE00 ... 0xDF99:
-      a = ((SID3ADDR | (addr & SID2MASK)) & SIDLMASK);
-      break;
-    default:
-      a = (uint8_t)(addr & SIDLMASK);
-      break;
-  }
-  return a;
 }
 
 

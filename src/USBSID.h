@@ -165,6 +165,30 @@ namespace USBSID_NS
     BOOTLOADER   =  20,   /*    0b10100 ~ 0x14 */
   };
 
+  /* Socket config array
+   *  0 Initiator     = 0x37
+   *  1 Verification  = 0x7f
+   *  2 HiByte        = socketOne enabled
+   *  2 LoByte        = socketOne dualsid
+   *  3 LoByte        = socketOne chipType
+   *  4 HiByte        = socketOne sid1Type
+   *  4 LoByte        = socketOne sid2Type
+   *  5 HiByte        = socketTwo enabled
+   *  5 LoByte        = socketTwo dualsid
+   *  6 LoByte        = socketTwo chipType
+   *  7 HiByte        = socketTwo sid1Type
+   *  7 LoByte        = socketTwo sid2Type
+   *  8 HiByte        = socketOne SID1 id
+   *  8 LoByte        = socketOne SID2 id
+   *  9 HiByte        = socketOne SID1 id
+   *  9 LoByte        = socketOne SID2 id
+   * 10 LoByte 0b001  = socketTwo mirrors socketOne
+   * 10 LoByte 0b010  = sockets are flipped One is Two and vice versa
+   * 10 LoByte 0b100  = SID addresses are mixed (quad sid only)
+   * 11 Terminator    = 0xff
+   */
+  #define SOCKET_BUFFER_SIZE 12
+
   /* Thread related */
   static int run_thread;
 
@@ -434,10 +458,6 @@ namespace USBSID_NS
       uint_fast64_t USBSID_WaitForCycle(uint_fast16_t cycles);   /* Sleep for n cycles */
       uint_fast64_t USBSID_WaitForCycle_(uint_fast16_t cycles);  /* Sleep for n cycles ~ deprecated */
       void USBSID_SyncTime(void);                                /* Sync time for cycle delay function */
-
-      /* Utils */
-      /* TODO: Deprecate this function, emulator/player should handle this */
-      uint8_t USBSID_Address(uint16_t addr);  /* Calculates correct SID address to write to if player does not */
   };
 
 } /* USBSIDDriver */
