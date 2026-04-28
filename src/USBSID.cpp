@@ -587,14 +587,36 @@ unsigned char USBSID_Class::USBSID_Read(uint8_t reg)
   if (!us_PortIsOpen) return 0;
   if (threaded == 0) {  /* Reading not supported with threaded writes */
     read_completed = write_completed = 0;
+    *result = 0;
     uint8_t rw_buff[2];
     rw_buff[0] = (READ << 6);
     rw_buff[1] = reg;
+      
+    // prepare in buffer first
+    transfer_in_pending = true;
+    rc = libusb_submit_transfer(transfer_in);
+    if (rc < 0) {
+      transfer_in_pending = false;
+      USBERR(stderr, "[USBSID] submit IN failed %d - %s: %s\n",
+                        rc, libusb_error_name(rc), libusb_strerror(rc));
+      return 0xFF;
+    }
+    // now out buffer
     memcpy(out_buffer, rw_buff, 2);
-    libusb_submit_transfer(transfer_out);
-    libusb_handle_events_completed(ctx, NULL);
-    libusb_submit_transfer(transfer_in);
-    libusb_handle_events_completed(ctx, &read_completed);
+    transfer_out_pending = true;
+    rc = libusb_submit_transfer(transfer_out);
+    if (rc < 0) {
+      transfer_out_pending = false;
+      libusb_cancel_transfer(transfer_in);
+      USBERR(stderr, "[USBSID] submit OUT failed %d - %s: %s\n",
+                     rc, libusb_error_name(rc), libusb_strerror(rc));
+      return 0xFF;
+    }
+    while (!read_completed && transfer_in_pending) {
+      struct timeval tv = {0, 1000};
+      libusb_handle_events_timeout_completed(ctx, &tv, NULL);
+    }
+
     return *result;
   } else {
     USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) is enabled\n", __func__, threaded);
@@ -607,12 +629,33 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff)
   if (!us_PortIsOpen) return 0;
   if (threaded == 0) {  /* Reading not supported with threaded writes */
     read_completed = write_completed = 0;
+    *result = 0;
+        
+    // prepare in buffer first
+    transfer_in_pending = true;
+    rc = libusb_submit_transfer(transfer_in);
+    if (rc < 0) {
+      transfer_in_pending = false;
+      USBERR(stderr, "[USBSID] submit IN failed %d - %s: %s\n",
+                      rc, libusb_error_name(rc), libusb_strerror(rc));
+      return 0xFF;
+    }
+    // now out buffer
     writebuff[0] = (READ << 6);
     memcpy(out_buffer, writebuff, 3);
-    libusb_submit_transfer(transfer_out);
-    libusb_handle_events_completed(ctx, NULL);
-    libusb_submit_transfer(transfer_in);
-    libusb_handle_events_completed(ctx, &read_completed);
+    transfer_out_pending = true;
+    rc = libusb_submit_transfer(transfer_out);
+    if (rc < 0) {
+      transfer_out_pending = false;
+      libusb_cancel_transfer(transfer_in);
+      USBERR(stderr, "[USBSID] submit OUT failed %d - %s: %s\n",
+                   rc, libusb_error_name(rc), libusb_strerror(rc));
+      return 0xFF;
+    }
+    while (!read_completed && transfer_in_pending) {
+      struct timeval tv = {0, 1000};
+      libusb_handle_events_timeout_completed(ctx, &tv, NULL);
+    }
     return *result;
   } else {
     USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) is enabled\n", __func__, threaded);
@@ -626,12 +669,33 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff, uint16_t cycle
   if (threaded == 0) {  /* Reading not supported with threaded writes */
     USBSID_WaitForCycle(cycles);
     read_completed = 0;
+    *result = 0;
+      
+    // prepare in buffer first
+    transfer_in_pending = true;
+    rc = libusb_submit_transfer(transfer_in);
+    if (rc < 0) {
+      transfer_in_pending = false;
+      USBERR(stderr, "[USBSID] submit IN failed %d - %s: %s\n",
+                    rc, libusb_error_name(rc), libusb_strerror(rc));
+      return 0xFF;
+    }
+    // now out buffer
     writebuff[0] = (READ << 6);
     memcpy(out_buffer, writebuff, 3);
-    libusb_submit_transfer(transfer_out);
-    libusb_handle_events_completed(ctx, NULL);
-    libusb_submit_transfer(transfer_in);
-    libusb_handle_events_completed(ctx, &read_completed);
+    transfer_out_pending = true;
+    rc = libusb_submit_transfer(transfer_out);
+    if (rc < 0) {
+      transfer_out_pending = false;
+      libusb_cancel_transfer(transfer_in);
+      USBERR(stderr, "[USBSID] submit OUT failed %d - %s: %s\n",
+                 rc, libusb_error_name(rc), libusb_strerror(rc));
+      return 0xFF;
+    }
+    while (!read_completed && transfer_in_pending) {
+      struct timeval tv = {0, 1000};
+      libusb_handle_events_timeout_completed(ctx, &tv, NULL);
+    }
     return *result;
   } else {
     USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded (%d) is enabled\n", __func__, threaded);
@@ -681,8 +745,8 @@ int USBSID_Class::USBSID_InitThread(void)
   flush_buffer = 0;
   run_thread = buffer_pos = 1;
   threaded = withcycles = true;
-  USBSID_InitRingBuffer(ring_size, diff_size);
   pthread_mutex_lock(&us_mutex);
+  USBSID_InitRingBuffer(ring_size, diff_size);
   us_thread++;
   pthread_mutex_unlock(&us_mutex);
   int error;
@@ -721,6 +785,8 @@ void USBSID_Class::USBSID_RestartThread(bool with_cycles)
   /* First check if not already running */
   USBSID_StopThread();
   /* Stop any active transfers */
+  transfer_in_pending = false;
+  transfer_out_pending = false;
   LIBUSB_StopTransfers();
   /* Free all buffers */
   LIBUSB_FreeOutBuffer();
@@ -919,6 +985,8 @@ void USBSID_Class::USBSID_WriteRingCycled(uint8_t reg, uint8_t val, uint16_t cyc
 
 void USBSID_Class::USBSID_RingPopCycled(void)
 {
+  if (transfer_out_pending)
+        return;
   thread_buffer[buffer_pos++] = USBSID_RingGet();  /* register */
   thread_buffer[buffer_pos++] = USBSID_RingGet();  /* value */
   thread_buffer[buffer_pos++] = USBSID_RingGet();  /* n cycles high */
@@ -931,8 +999,11 @@ void USBSID_Class::USBSID_RingPopCycled(void)
     thread_buffer[0] = (uint8_t)((CYCLED_WRITE << 6) | (buffer_pos - 1));
     memcpy(out_buffer, thread_buffer, buffer_pos);
     buffer_pos = 1;
+    transfer_out_pending = true;
     libusb_submit_transfer(transfer_out);
     libusb_handle_events_completed(ctx, NULL);
+    struct timeval tv = {0, 500};  // 0.5 ms
+    libusb_handle_events_timeout_completed(ctx, &tv, NULL);
     memset(thread_buffer, 0, 64);
     memset(out_buffer, 0, len_out_buffer);
   }
@@ -941,6 +1012,8 @@ void USBSID_Class::USBSID_RingPopCycled(void)
 
 void USBSID_Class::USBSID_RingPop(void)
 {
+  if (transfer_out_pending)
+        return;
   write_completed = 0;
 
   /* Ex: 0xD418 */
@@ -1045,7 +1118,7 @@ int USBSID_Class::LIBUSB_OpenDevice(void)
   devh = libusb_open_device_with_vid_pid(ctx, VENDOR_ID, PRODUCT_ID);
   if (!devh) {
     rc = -1;
-    USBERR(stderr, "[USBSID] Error opening USB device with VID & PID: %d %s: %s\r\n", rc, libusb_error_name(rc), libusb_strerror(rc));
+      USBERR(stderr, "[USBSID] Error opening USB device with VID & PID: %d %s: %s\r\n", rc, libusb_error_name(rc), libusb_strerror(rc));
   }
   return rc;
 }
@@ -1157,7 +1230,7 @@ int USBSID_Class::LIBUSB_ConfigureDevice(void)
   }
 
   /* set line encoding here */  // NOTE: NOT USED FOR CDC
-  rc = libusb_control_transfer(devh, 0x21, 0x20, 0, 0, encoding, sizeof(encoding), 0);
+  rc = libusb_control_transfer(devh, 0x21, 0x20, 0, 0, encoding, sizeof(encoding), 1000);
   if (rc < 0 || rc != 7) {  /* should return 7 for the encoding size */
     USBERR(stderr, "[USBSID] Error configuring line encoding during control transfer: %d, %s: %s\r\n", rc, libusb_error_name(rc), libusb_strerror(rc));
     rc = -1;
@@ -1261,23 +1334,38 @@ void USBSID_Class::LIBUSB_FreeInBuffer(void)
 
 void USBSID_Class::LIBUSB_StopTransfers(void)
 {
-  USBDBG(stdout, "[USBSID] Stopping transfers\r\n");
-  if (transfer_out != NULL) {
-    rc = libusb_cancel_transfer(transfer_out);
-    libusb_free_transfer(transfer_out);
-    if (rc < 0 && rc != -5) {
-      USBERR(stderr, "[USBSID] Error, failed to cancel transfer %d - %s: %s\n", rc, libusb_error_name(rc), libusb_strerror(rc));
-    }
-  }
+    USBDBG(stdout, "[USBSID] Stopping transfers\r\n");
 
-  if (transfer_in != NULL) {
-    rc = libusb_cancel_transfer(transfer_in);
-    libusb_free_transfer(transfer_in);
-    if (rc < 0 && rc != -5) {
-      USBERR(stderr, "[USBSID] Error, failed to cancel transfer %d - %s: %s\n", rc, libusb_error_name(rc), libusb_strerror(rc));
+    if (transfer_out && transfer_out_pending) {
+        rc = libusb_cancel_transfer(transfer_out);
+        if (rc < 0 && rc != LIBUSB_ERROR_NOT_FOUND) {
+            USBERR(stderr, "[USBSID] Error cancel OUT %d - %s: %s\n",
+                   rc, libusb_error_name(rc), libusb_strerror(rc));
+        }
     }
-  }
-  return;
+
+    if (transfer_in && transfer_in_pending) {
+        rc = libusb_cancel_transfer(transfer_in);
+        if (rc < 0 && rc != LIBUSB_ERROR_NOT_FOUND) {
+            USBERR(stderr, "[USBSID] Error cancel IN %d - %s: %s\n",
+                   rc, libusb_error_name(rc), libusb_strerror(rc));
+        }
+    }
+
+    while (transfer_out_pending || transfer_in_pending) {
+        struct timeval tv = {0, 1000};
+        libusb_handle_events_timeout_completed(ctx, &tv, NULL);
+    }
+
+    if (transfer_out) {
+        libusb_free_transfer(transfer_out);
+        transfer_out = NULL;
+    }
+
+    if (transfer_in) {
+        libusb_free_transfer(transfer_in);
+        transfer_in = NULL;
+    }
 }
 
 int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
@@ -1357,6 +1445,8 @@ int USBSID_Class::LIBUSB_Exit(void)
     #ifdef US_RESET_ON_EXIT
     USBSID_Reset();
     #endif
+    transfer_in_pending = false;
+    transfer_out_pending = false;
     LIBUSB_StopTransfers();
     LIBUSB_FreeInBuffer();
     LIBUSB_FreeOutBuffer();
@@ -1380,6 +1470,7 @@ void LIBUSB_CALL USBSID_Class::usb_out(struct libusb_transfer *transfer)
       USBERR(stderr, "[USBSID] Warning: transfer out interrupted with status %d, %s: %s\r", rc, libusb_error_name(rc), libusb_strerror(rc));
     }
     libusb_free_transfer(transfer);
+    transfer_out = NULL;
     return;
   }
 
@@ -1388,27 +1479,39 @@ void LIBUSB_CALL USBSID_Class::usb_out(struct libusb_transfer *transfer)
   }
   // WARNING: Resubmit is shit for normal tunes but good for cycle exact digitunes, sigh...
   // if (threaded) libusb_submit_transfer(transfer_out);  /* Resubmit queue when finished */
-  return;
+  //libusb_free_transfer(transfer);
+  //transfer_out = NULL;
+  transfer_out_pending = false;
 }
 
 void LIBUSB_CALL USBSID_Class::usb_in(struct libusb_transfer *transfer)
 {
-  read_completed = (*(int *)transfer->user_data);
+    if (transfer->status != LIBUSB_TRANSFER_COMPLETED) {
+         rc = transfer->status;
 
-  if (transfer->status != LIBUSB_TRANSFER_COMPLETED) {
-    rc = transfer_in->status;
-    if (rc != LIBUSB_TRANSFER_CANCELLED) {
+         if (rc != LIBUSB_TRANSFER_CANCELLED) {
              USBERR(stderr,
                     "[USBSID] Warning: transfer in interrupted with status '%s'\r",
-                    libusb_error_name(_rc));
-    }
-    libusb_free_transfer(transfer);
-    return;
-  }
+                    libusb_error_name(rc));
+         }
 
-  memcpy(result, in_buffer, 1);
-  read_completed = 1;
-  return;
+         libusb_free_transfer(transfer);
+         transfer_in = NULL;
+         return;
+     }
+
+     if (transfer->actual_length > 0) {
+         memcpy(result, in_buffer, 1);
+     }
+
+     if (transfer->user_data) {
+         *(int *)transfer->user_data = 1;
+     }
+
+    read_completed = 1;
+    transfer_in_pending = false;
+    //libusb_free_transfer(transfer);
+    //transfer_in = NULL;
 }
 
 
