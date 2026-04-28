@@ -7,7 +7,7 @@
  * This file is part of USBSID-Pico (https://github.com/LouDnl/USBSID-Pico-driver)
  * File author: LouD
  *
- * Copyright (c) 2024-2025 LouD
+ * Copyright (c) 2024-2026 LouD
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,7 +37,12 @@ using namespace std;
 static inline uint8_t* us_alloc(size_t alignment, size_t size)
 {
 #if defined(__US_LINUX_COMPILE)
-  return (uint8_t*)aligned_alloc(alignment, size);
+  #ifdef HAVE_ALIGNED_ALLOC
+    return (uint8_t*)aligned_alloc(alignment, size);
+  #else
+    (void)alignment;
+    return (uint8_t*)malloc(size);
+  #endif
 #elif defined(__US_WINDOWS_COMPILE)
   return (uint8_t*)_aligned_malloc(size, alignment);
 #else
@@ -373,7 +378,9 @@ int USBSID_Class::USBSID_GetNumSIDs(void)
   if (!us_Initialised) return 0;
   if (numsids == 0) {
     uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x39, 0, 0, 0, 0};
+    /* fprintf(stderr, "[USBSID] Start GeNumSIDs write\n"); */
     USBSID_SingleWrite(configbuff, 6);
+    /* fprintf(stderr, "[USBSID] Start GeNumSIDs read\n"); */
     numsids = USBSID_SingleReadConfig(result, 1);
     return numsids;
   } else {
@@ -398,7 +405,9 @@ int USBSID_Class::USBSID_GetPCBVersion(void)
   if (!us_Initialised) return 0;
   if (pcbversion == -1) {
     uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x81, 0x1, 0, 0, 0};
+    /* fprintf(stderr, "[USBSID] Start PCB version write\n"); */
     USBSID_SingleWrite(configbuff, 6);
+    /* fprintf(stderr, "[USBSID] Start PCB version read\n"); */
     pcbversion = USBSID_SingleReadConfig(result, 1);
   }
   return pcbversion;
@@ -433,7 +442,7 @@ void USBSID_Class::USBSID_ToggleStereo(void)
 
 /* SYNCHRONOUS */
 
-void USBSID_Class::USBSID_SingleWrite(unsigned char *buff, int len)
+void USBSID_Class::USBSID_SingleWrite(unsigned char *buff, size_t len)
 {
   if (!us_Initialised) return;
   int actual_length = 0;
@@ -456,24 +465,31 @@ unsigned char USBSID_Class::USBSID_SingleRead(uint8_t reg)
     USBERR(stderr, "[USBSID] Timeout error while reading (%d)\n", actual_length);
     return 0;
   } else if (rc < 0) {
-    USBERR(stderr, "[USBSID] Error while waiting for char while reading\n");
+    USBERR(stderr, "[USBSID] Error while waiting for char while reading: %d, %s: %s\n",
+      rc, libusb_error_name(rc), libusb_strerror(rc));
     return 0;
   }
   return result[0];
 }
 
-unsigned char USBSID_Class::USBSID_SingleReadConfig(unsigned char *buff, int len)
+unsigned char USBSID_Class::USBSID_SingleReadConfig(unsigned char *buff, size_t len)
 {
   if (!us_Initialised) return 0;
   int actual_length;
   rc = libusb_bulk_transfer(devh, EP_IN_ADDR, buff, len, &actual_length, 0);
+  /* fprintf(stderr, "[USBSID] ReadConfig: rc=%d actual_length=%d buff[0]=%d\n", rc, actual_length, buff[0]); */
   if (rc == LIBUSB_ERROR_TIMEOUT) {
     USBERR(stderr, "[USBSID] Timeout error while reading (%d)\n", actual_length);
     return 0;
   } else if (rc < 0) {
-    USBERR(stderr, "[USBSID] Error while waiting for char while reading\n");
+    USBERR(stderr, "[USBSID] Error while waiting for char while reading: %d, %s: %s\n",
+      rc, libusb_error_name(rc), libusb_strerror(rc));
     return 0;
   }
+/*   if (actual_length == 0) {
+    USBERR(stderr, "[USBSID] Zero-length read completed (kext consumed data?), retrying\n");
+    return USBSID_SingleReadConfig(buff, len);  // retry once
+  } */
   return *buff;
 }
 
@@ -655,8 +671,8 @@ int USBSID_Class::USBSID_InitThread(void)
   flush_buffer = 0;
   run_thread = buffer_pos = 1;
   threaded = withcycles = true;
-  USBSID_InitRingBuffer(ring_size, diff_size);
   pthread_mutex_lock(&us_mutex);
+  USBSID_InitRingBuffer(ring_size, diff_size);
   us_thread++;
   pthread_mutex_unlock(&us_mutex);
   int error;
@@ -1010,8 +1026,7 @@ int USBSID_Class::LIBUSB_OpenDevice(void)
   devh = libusb_open_device_with_vid_pid(ctx, VENDOR_ID, PRODUCT_ID);
   if (!devh) {
     rc = -1;
-    USBERR(stderr, "[USBSID] Error opening USB device with VID & PID: %d %s: %s\r\n",
-      rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
+    USBERR(stderr, "[USBSID] Error opening USB device with VID & PID: %d %s: %s\r\n", rc, libusb_error_name(rc), libusb_strerror(rc));
   }
   return rc;
 }
@@ -1032,7 +1047,7 @@ void USBSID_Class::LIBUSB_CloseDevice(void)
   return;
 }
 
-int USBSID_Class::LIBUSB_Available(uint16_t vendor_id, uint16_t product_id)
+int USBSID_Class::LIBUSB_Available(libusb_context *ctx_, uint16_t vendor_id, uint16_t product_id)
 {
   struct libusb_device **devs;
   struct libusb_device *dev;
@@ -1041,7 +1056,7 @@ int USBSID_Class::LIBUSB_Available(uint16_t vendor_id, uint16_t product_id)
   us_Available = false;
   us_Found = 0;
 
-  if (libusb_get_device_list(ctx, &devs) < 0)
+  if (libusb_get_device_list(ctx_, &devs) < 0)
     return 0;
 
   while ((dev = devs[i++]) != NULL) {
@@ -1240,8 +1255,8 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
   libusb_set_option(ctx, LIBUSB_OPTION_LOG_LEVEL, 0);
 
   /* Check for an available USBSID-Pico */
-  if (LIBUSB_Available(VENDOR_ID, PRODUCT_ID) <= 0) {
-    USBDBG(stderr, "[USBSID] USBSID-Pico not connected\n");
+  if (LIBUSB_Available(ctx, VENDOR_ID, PRODUCT_ID) <= 0) {
+    USBERR(stderr, "[USBSID] USBSID-Pico not connected\n");
     goto out;
   }
 
@@ -1322,7 +1337,7 @@ void LIBUSB_CALL USBSID_Class::usb_out(struct libusb_transfer *transfer)
     USBERR(stderr, "[USBSID] Sent data length %d is different from the defined buffer length: %d or actual length %d\r", transfer->length, len_out_buffer, transfer->actual_length);
   }
 
-  // BUG: Resubmit is shit for normal tunes but good for cycle exact digitunes, sigh...
+  // WARNING: Resubmit is shit for normal tunes but good for cycle exact digitunes, sigh...
   // if (threaded) libusb_submit_transfer(transfer_out);  /* Resubmit queue when finished */
   return;
 }
