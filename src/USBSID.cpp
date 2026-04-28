@@ -38,12 +38,12 @@ using namespace std;
 static inline uint8_t* us_alloc(size_t alignment, size_t size)
 {
 #if defined(__US_LINUX_COMPILE)
-#ifdef HAVE_ALIGNED_ALLOC
-  return (uint8_t*)aligned_alloc(alignment, size);
-#else
-  (void)alignment;
-  return (uint8_t*)malloc(size);
-#endif
+  #ifdef HAVE_ALIGNED_ALLOC
+    return (uint8_t*)aligned_alloc(alignment, size);
+  #else
+    (void)alignment;
+    return (uint8_t*)malloc(size);
+  #endif
 #elif defined(__US_WINDOWS_COMPILE)
   return (uint8_t*)_aligned_malloc(size, alignment);
 #else
@@ -459,7 +459,7 @@ void USBSID_Class::USBSID_ToggleStereo(void)
 
 /* SYNCHRONOUS */
 
-void USBSID_Class::USBSID_SingleWrite(unsigned char *buff, int len)
+void USBSID_Class::USBSID_SingleWrite(unsigned char *buff, size_t len)
 {
   if (!us_PortIsOpen) return;
   int actual_length = 0;
@@ -491,7 +491,7 @@ unsigned char USBSID_Class::USBSID_SingleRead(uint8_t reg)
   return result[0];
 }
 
-unsigned char USBSID_Class::USBSID_SingleReadConfig(unsigned char *buff, int len)
+unsigned char USBSID_Class::USBSID_SingleReadConfig(unsigned char *buff, size_t len)
 {
   if (!us_PortIsOpen) return 0;
   int actual_length;
@@ -1127,7 +1127,18 @@ int USBSID_Class::LIBUSB_OpenDevice(void)
   devh = libusb_open_device_with_vid_pid(ctx, VENDOR_ID, PRODUCT_ID);
   if (!devh) {
     rc = -1;
-      USBERR(stderr, "[USBSID] Error opening USB device with VID & PID: %d %s: %s\r\n", rc, libusb_error_name(rc), libusb_strerror(rc));
+    USBERR(stderr, "[USBSID] Error opening USB device with VID & PID: %d %s: %s\r\n", rc, libusb_error_name(rc), libusb_strerror(rc));
+    return rc;
+  }
+  /* On macOS the IOKit CDC driver will reclaim interfaces unless we enable
+   * auto-detach, which makes libusb detach/reattach the kernel driver
+   * automatically around libusb_claim_interface / libusb_release_interface. */
+  rc = libusb_set_auto_detach_kernel_driver(devh, 1);
+  if (rc == LIBUSB_ERROR_NOT_SUPPORTED) {
+    /* Not supported on this platform (Windows/older libusb) — ignore */
+    rc = 0;
+  } else if (rc < 0) {
+    USBERR(stderr, "[USBSID] Error setting auto detach kernel driver: %d %s: %s\r\n", rc, libusb_error_name(rc), libusb_strerror(rc));
   }
   return rc;
 }
@@ -1398,8 +1409,8 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
   libusb_set_option(ctx, LIBUSB_OPTION_LOG_LEVEL, 0);
 
   /* Check for an available USBSID-Pico */
-    if (LIBUSB_Available(ctx, VENDOR_ID, PRODUCT_ID) <= 0) {
-        USBERR(stderr, "[USBSID] USBSID-Pico not connected\n");
+  if (LIBUSB_Available(ctx, VENDOR_ID, PRODUCT_ID) <= 0) {
+    USBDBG(stderr, "[USBSID] USBSID-Pico not connected\n");
     goto out;
   }
 

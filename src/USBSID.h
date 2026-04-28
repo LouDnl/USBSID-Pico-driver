@@ -434,9 +434,9 @@ namespace USBSID_NS
       void USBSID_ToggleStereo(void);                                          /* Toggle between mono and stereo ~ v1.3 PCB only */
 
       /* Synchronous direct */
-      void USBSID_SingleWrite(unsigned char *buff, int len);                   /* Single write buffer of size_t ~ example: config writing */
+      void USBSID_SingleWrite(unsigned char *buff, size_t len);                /* Single write buffer of size_t ~ example: config writing */
       unsigned char USBSID_SingleRead(uint8_t reg);                            /* Single read register, return result */
-      unsigned char USBSID_SingleReadConfig(unsigned char *buff, int len);     /* Single to buffer of specified length ~ example: config reading */
+      unsigned char USBSID_SingleReadConfig(unsigned char *buff, size_t len);  /* Single to buffer of specified length ~ example: config reading */
 
       /* Asynchronous direct */
       void USBSID_Write(unsigned char *buff, size_t len);                      /* Write buffer of size_t len */
