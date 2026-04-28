@@ -7,7 +7,7 @@
  * This file is part of USBSID-Pico (https://github.com/LouDnl/USBSID-Pico-driver)
  * File author: LouD
  *
- * Copyright (c) 2024-2025 LouD
+ * Copyright (c) 2024-2026 LouD
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,7 +38,12 @@ using namespace std;
 static inline uint8_t* us_alloc(size_t alignment, size_t size)
 {
 #if defined(__US_LINUX_COMPILE)
+#ifdef HAVE_ALIGNED_ALLOC
   return (uint8_t*)aligned_alloc(alignment, size);
+#else
+  (void)alignment;
+  return (uint8_t*)malloc(size);
+#endif
 #elif defined(__US_WINDOWS_COMPILE)
   return (uint8_t*)_aligned_malloc(size, alignment);
 #else
@@ -114,8 +119,11 @@ int USBSID_Class::USBSID_Init(bool start_threaded, bool with_cycles)
       if (threaded) {
         rc = USBSID_InitThread();
       }
-      USBSID_GetClockRate();  /* Once on init */
-      us_PortIsOpen = true;
+        us_PortIsOpen = true;
+        USBSID_Mute();
+        USBSID_ClearBus();
+        USBSID_UnMute();
+        USBSID_GetClockRate();  /* Once on init */
       return rc;
     } else {
       USBDBG(stdout, "[USBSID] Not found\n");
@@ -134,8 +142,9 @@ int USBSID_Class::USBSID_Close(void)
   if (rc >= 0) e = LIBUSB_Exit();
   if (rc != -1) USBERR(stderr, "Expected rc == -1, received: %d\n", rc);
   if (e != 0) USBERR(stderr, "Expected e == 0, received: %d\n", e);
-  if (devh != NULL) USBERR(stderr, "Expected dev == NULL, received: %p", (void*)&devh);
+  if (devh != NULL) USBERR(stderr, "Expected dev == NULL, received: %p\n", (void*)&devh);
   us_PortIsOpen = false;
+  us_Initialised = false;
   USBDBG(stdout, "[USBSID] De-init finished\n");
   return 0;
 }
@@ -1046,19 +1055,31 @@ void USBSID_Class::LIBUSB_CloseDevice(void)
   USBDBG(stdout, "[USBSID] Close device\r\n");
   if (us_InstanceID != 0) return;
   if (devh) {
-    for (int if_num = 0; if_num < 2; if_num++) {
+      int start_if, end_if;
+  #ifdef USE_RAW_USBIF
+      /* e.g. macOS needs RAW interface 4, others may stay with 0, 1 */
+      start_if = 4;
+      end_if = 5;
+      // no need to detach again...
+      rc = libusb_release_interface(devh, start_if);
+  #else
+      start_if = 0;
+      end_if = 2;
+
+    for (int if_num = start_if; if_num < end_if; if_num++) {
       if (libusb_kernel_driver_active(devh, if_num)) {
         rc = libusb_detach_kernel_driver(devh, if_num);
         USBERR(stderr, "[USBSID] Error, in libusb_detach_kernel_driver: %d, %s: %s\n", rc, libusb_error_name(rc), libusb_strerror(rc));
       }
-      libusb_release_interface(devh, if_num);
+      rc = libusb_release_interface(devh, if_num);
     }
+#endif
     libusb_close(devh);
   }
   return;
 }
 
-int USBSID_Class::LIBUSB_Available(uint16_t vendor_id, uint16_t product_id)
+int USBSID_Class::LIBUSB_Available(libusb_context *ctx_, uint16_t vendor_id, uint16_t product_id)
 {
   struct libusb_device **devs;
   struct libusb_device *dev;
@@ -1067,7 +1088,7 @@ int USBSID_Class::LIBUSB_Available(uint16_t vendor_id, uint16_t product_id)
   us_Available = false;
   us_Found = 0;
 
-  if (libusb_get_device_list(ctx, &devs) < 0)
+  if (libusb_get_device_list(ctx_, &devs) < 0)
     return 0;
 
   while ((dev = devs[i++]) != NULL) {
@@ -1095,7 +1116,16 @@ int USBSID_Class::LIBUSB_DetachKernelDriver(void)
    * Class defines two interfaces: the Control interface and the
    * Data interface.
    */
-  for (int if_num = 0; if_num < 2; if_num++) {
+    int start_if, end_if;
+    /* macOS needs RAW interface 4, others can stay with 0, 1 */
+#ifdef USE_RAW_USBIF
+    start_if = 4;
+    end_if = 5;
+#else
+    start_if = 0;
+    end_if = 2;
+#endif
+  for (int if_num = start_if; if_num < end_if; if_num++) {
     if (libusb_kernel_driver_active(devh, if_num)) {
       libusb_detach_kernel_driver(devh, if_num);
     }
@@ -1112,6 +1142,11 @@ int USBSID_Class::LIBUSB_DetachKernelDriver(void)
 int USBSID_Class::LIBUSB_ConfigureDevice(void)
 {
   USBDBG(stdout, "[USBSID] Configure device\r\n");
+#ifdef USE_RAW_USBIF
+    /* again macOS needs this */
+    rc = libusb_set_interface_alt_setting(devh, 4, 0);
+    rc = libusb_control_transfer(devh, 0x21, 0x22, 0x01, 4, NULL, 0, 1000);
+#else
   /* Start configuring the device:
    * set line state */
   rc = libusb_control_transfer(devh, 0x21, 0x22, ACM_CTRL_DTR | ACM_CTRL_RTS, 0, NULL, 0, 0);
@@ -1128,6 +1163,7 @@ int USBSID_Class::LIBUSB_ConfigureDevice(void)
     rc = -1;
     return rc;
   }
+#endif
   return rc;
 }
 
@@ -1266,20 +1302,23 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
   libusb_set_option(ctx, LIBUSB_OPTION_LOG_LEVEL, 0);
 
   /* Check for an available USBSID-Pico */
-  if (LIBUSB_Available(VENDOR_ID, PRODUCT_ID) <= 0) {
-    USBDBG(stderr, "[USBSID] USBSID-Pico not connected\n");
+    if (LIBUSB_Available(ctx, VENDOR_ID, PRODUCT_ID) <= 0) {
+        USBERR(stderr, "[USBSID] USBSID-Pico not connected\n");
     goto out;
   }
 
   if (LIBUSB_OpenDevice() < 0) {
     goto out;
   }
+
   if (LIBUSB_DetachKernelDriver() < 0) {
     goto out;
   }
+ 
   if (LIBUSB_ConfigureDevice() < 0) {
     goto out;
   }
+
   #ifdef US_UNMUTE_ON_ENTRY
   USBSID_UnMute();
   #endif
@@ -1326,7 +1365,7 @@ int USBSID_Class::LIBUSB_Exit(void)
   if (ctx) {
     libusb_exit(ctx);
   }
-
+    ctx = NULL;
   rc = -1;
   devh = NULL;
   USBDBG(stdout, "[USBSID] Closed USB device\r\n");
@@ -1347,8 +1386,7 @@ void LIBUSB_CALL USBSID_Class::usb_out(struct libusb_transfer *transfer)
   if (transfer->actual_length != len_out_buffer) {
     USBERR(stderr, "[USBSID] Sent data length %d is different from the defined buffer length: %d or actual length %d\r", transfer->length, len_out_buffer, transfer->actual_length);
   }
-
-  // BUG: Resubmit is shit for normal tunes but good for cycle exact digitunes, sigh...
+  // WARNING: Resubmit is shit for normal tunes but good for cycle exact digitunes, sigh...
   // if (threaded) libusb_submit_transfer(transfer_out);  /* Resubmit queue when finished */
   return;
 }
@@ -1360,7 +1398,9 @@ void LIBUSB_CALL USBSID_Class::usb_in(struct libusb_transfer *transfer)
   if (transfer->status != LIBUSB_TRANSFER_COMPLETED) {
     rc = transfer_in->status;
     if (rc != LIBUSB_TRANSFER_CANCELLED) {
-      USBERR(stderr, "[USBSID] Warning: transfer in interrupted with status '%s'\r", libusb_error_name(rc));
+             USBERR(stderr,
+                    "[USBSID] Warning: transfer in interrupted with status '%s'\r",
+                    libusb_error_name(_rc));
     }
     libusb_free_transfer(transfer);
     return;

@@ -7,7 +7,7 @@
  * This file is part of USBSID-Pico (https://github.com/LouDnl/USBSID-Pico-driver)
  * File author: LouD
  *
- * Copyright (c) 2024-2025 LouD
+ * Copyright (c) 2024-2026 LouD
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,6 +25,11 @@
 
 #ifndef _USBSID_H_
 #define _USBSID_H_
+
+#ifdef __APPLE__
+#undef HAVE_ALIGNED_ALLOC
+#define USE_RAW_USBIF
+#endif
 
 #if defined(__linux__) || defined(__linux) || defined(linux) || defined(__unix__) || defined(__APPLE__)
   #define __US_LINUX_COMPILE
@@ -135,8 +140,13 @@ namespace USBSID_NS
     PRODUCT_ID     = 0x4011,
     ACM_CTRL_DTR   = 0x01,
     ACM_CTRL_RTS   = 0x02,
+#ifdef USE_RAW_USBIF
+    EP_OUT_ADDR    = 0x04,
+    EP_IN_ADDR     = 0x84,
+#else
     EP_OUT_ADDR    = 0x02,
     EP_IN_ADDR     = 0x82,
+#endif
     LEN_IN_BUFFER  = 1,
     LEN_OUT_BUFFER = 64,
     #ifdef DEBUG_USBSID_MEMORY
@@ -341,7 +351,7 @@ namespace USBSID_NS
       /* LIBUSB */
       int LIBUSB_Setup(bool start_threaded, bool with_cycles);
       int LIBUSB_Exit(void);
-      int LIBUSB_Available(uint16_t vendor_id, uint16_t product_id);
+      int LIBUSB_Available(libusb_context *ctx_, uint16_t vendor_id, uint16_t product_id);
       void LIBUSB_StopTransfers(void);
       int LIBUSB_OpenDevice(void);
       void LIBUSB_CloseDevice(void);
@@ -418,9 +428,9 @@ namespace USBSID_NS
       void USBSID_ToggleStereo(void);                                     /* Toggle between mono and stereo ~ v1.3 PCB only */
 
       /* Synchronous direct */
-      void USBSID_SingleWrite(unsigned char *buff, int len);                /* Single write buffer of size_t ~ example: config writing */
-      unsigned char USBSID_SingleRead(uint8_t reg);                            /* Single read register, return result */
-      unsigned char USBSID_SingleReadConfig(unsigned char *buff, int len);  /* Single to buffer of specified length ~ example: config reading */
+      void USBSID_SingleWrite(unsigned char *buff, int len);              /* Single write buffer of size_t ~ example: config writing */
+      unsigned char USBSID_SingleRead(uint8_t reg);                       /* Single read register, return result */
+      unsigned char USBSID_SingleReadConfig(unsigned char *buff, int len); /* Single to buffer of specified length ~ example: config reading */
 
       /* Asynchronous direct */
       void USBSID_Write(unsigned char *buff, size_t len);                    /* Write buffer of size_t len */
