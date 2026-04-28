@@ -28,7 +28,7 @@
 
 #ifdef __APPLE__
 #undef HAVE_ALIGNED_ALLOC
-#define USE_RAW_USBIF
+#define USE_VENDOR_ITF
 #define LIBUSB_TIMEOUT   1000
 #else
 #define LIBUSB_TIMEOUT   0
@@ -143,7 +143,7 @@ namespace USBSID_NS
     PRODUCT_ID     = 0x4011,
     ACM_CTRL_DTR   = 0x01,
     ACM_CTRL_RTS   = 0x02,
-#ifdef USE_RAW_USBIF
+#ifdef USE_VENDOR_ITF
     EP_OUT_ADDR    = 0x04,
     EP_IN_ADDR     = 0x84,
 #else
@@ -216,8 +216,8 @@ namespace USBSID_NS
   static struct libusb_device_handle *devh = NULL;
   static struct libusb_transfer *transfer_out = NULL;  /* OUT-going transfers (OUT from host PC to USB-device) */
   static struct libusb_transfer *transfer_in = NULL;  /* IN-coming transfers (IN to host PC from USB-device) */
-static bool transfer_out_pending = false;   /* for better transfer sync */
-static bool transfer_in_pending = false;
+  static bool transfer_out_pending = false;   /* for better transfer sync */
+  static bool transfer_in_pending = false;
 
   static libusb_context *ctx = NULL;
   static bool in_buffer_dma = false;
