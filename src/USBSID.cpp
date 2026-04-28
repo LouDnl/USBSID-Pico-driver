@@ -990,7 +990,7 @@ void USBSID_Class::USBSID_WriteRingCycled(uint8_t reg, uint8_t val, uint16_t cyc
 
 void USBSID_Class::USBSID_RingPopCycled(void)
 {
-#ifdef USE_RAW_USBIF /* This can break play for tunes like Fanta in Space */
+#ifdef USE_VENDOR_ITF /* This can break play for tunes like Fanta in Space */
   if (transfer_out_pending)
     return;
 #endif
@@ -1009,7 +1009,7 @@ void USBSID_Class::USBSID_RingPopCycled(void)
     transfer_out_pending = true;
     libusb_submit_transfer(transfer_out);
     libusb_handle_events_completed(ctx, NULL);
-#ifdef USE_RAW_USBIF /* This can break play for tunes like Fanta in Space */
+#ifdef USE_VENDOR_ITF /* This can break play for tunes like Fanta in Space */
     struct timeval tv = {0, 500};  // 0.5 ms
     libusb_handle_events_timeout_completed(ctx, &tv, NULL);
 #endif
