@@ -29,6 +29,9 @@
 #ifdef __APPLE__
 #undef HAVE_ALIGNED_ALLOC
 #define USE_RAW_USBIF
+#define LIBUSB_TIMEOUT   1000
+#else
+#define LIBUSB_TIMEOUT   0
 #endif
 
 #if defined(__linux__) || defined(__linux) || defined(linux) || defined(__unix__) || defined(__APPLE__)
