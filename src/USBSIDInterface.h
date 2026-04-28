@@ -62,11 +62,11 @@ extern "C" {
   // int found_USBSID(USBSIDitf);
 
   /* Synchronous direct */
-  void writesingle_USBSID(USBSIDitf, unsigned char *buff, int len);
+  void writesingle_USBSID(USBSIDitf, unsigned char *buff, size_t len);
   unsigned char readsingle_USBSID(USBSIDitf, uint8_t reg);
 
   /* Asynchronous direct */
-  void writebuffer_USBSID(USBSIDitf, unsigned char *buff, int len);
+  void writebuffer_USBSID(USBSIDitf, unsigned char *buff, size_t len);
   void write_USBSID(USBSIDitf, uint8_t reg, uint8_t val);
   void writecycled_USBSID(USBSIDitf, uint8_t reg, uint8_t val, uint16_t cycles);
   unsigned char read_USBSID(USBSIDitf p,  uint8_t reg);
