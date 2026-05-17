@@ -288,15 +288,20 @@ uint8_t* USBSID_Class::USBSID_GetSocketConfig(uint8_t socket_config[])
     uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x37, 0, 0, 0, 0};
     USBSID_SingleWrite(configbuff, 6);
     uint8_t socket_buff[SOCKET_BUFFER_SIZE];
-    USBSID_SingleReadConfig(socket_buff, SOCKET_BUFFER_SIZE);
-    if (socket_buff[0] == 0x37
-      && socket_buff[1] == 0x7F
-      && socket_buff[SOCKET_BUFFER_SIZE - 1] == 0xFF) {
-      memcpy(socket_config, socket_buff, SOCKET_BUFFER_SIZE);
-      return socket_config;
-    } else {
+    int ret = USBSID_ReadConfig(socket_buff, SOCKET_BUFFER_SIZE);
+    if (ret != SOCKET_BUFFER_SIZE) {
       socketconfig = -1;
       return NULL;
+    } else {
+      if (socket_buff[0] == 0x37
+        && socket_buff[1] == 0x7F
+        && socket_buff[SOCKET_BUFFER_SIZE - 1] == 0xFF) {
+        memcpy(socket_config, socket_buff, SOCKET_BUFFER_SIZE);
+        return socket_config;
+      } else {
+        socketconfig = -1;
+        return NULL;
+      }
     }
   } else {
     socketconfig = (socketconfig == 1 ? socketconfig : -1);
@@ -507,6 +512,24 @@ unsigned char USBSID_Class::USBSID_SingleReadConfig(unsigned char *buff, size_t 
   }
   return *buff;
 }
+
+int USBSID_Class::USBSID_ReadConfig(unsigned char *buff, size_t len)
+{
+  if (!us_PortIsOpen) return 0;
+  int actual_length;
+  rc = libusb_bulk_transfer(devh, EP_IN_ADDR, buff, len, &actual_length, LIBUSB_TIMEOUT);
+  transfer_in_pending = false;
+  if (rc == LIBUSB_ERROR_TIMEOUT) {
+    USBERR(stderr, "[USBSID] Timeout error while reading (%d)\n", actual_length);
+    return 0;
+  } else if (rc < 0) {
+    USBERR(stderr, "[USBSID] Error while waiting for char while reading: %d, %s: %s\n",
+      rc, libusb_error_name(rc), libusb_strerror(rc));
+    return 0;
+  }
+  return actual_length;
+}
+
 
 /* ASYNCHRONOUS */
 

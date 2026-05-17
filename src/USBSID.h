@@ -437,6 +437,7 @@ namespace USBSID_NS
       void USBSID_SingleWrite(unsigned char *buff, size_t len);                /* Single write buffer of size_t ~ example: config writing */
       unsigned char USBSID_SingleRead(uint8_t reg);                            /* Single read register, return result */
       unsigned char USBSID_SingleReadConfig(unsigned char *buff, size_t len);  /* Single to buffer of specified length ~ example: config reading */
+      int USBSID_ReadConfig(unsigned char *buff, size_t len);                  /* Single to buffer of specified length ~ returns size of data */
 
       /* Asynchronous direct */
       void USBSID_Write(unsigned char *buff, size_t len);                      /* Write buffer of size_t len */
