@@ -378,9 +378,7 @@ int USBSID_Class::USBSID_GetNumSIDs(void)
   if (!us_Initialised) return 0;
   if (numsids == 0) {
     uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x39, 0, 0, 0, 0};
-    /* fprintf(stderr, "[USBSID] Start GeNumSIDs write\n"); */
     USBSID_SingleWrite(configbuff, 6);
-    /* fprintf(stderr, "[USBSID] Start GeNumSIDs read\n"); */
     numsids = USBSID_SingleReadConfig(result, 1);
     return numsids;
   } else {
@@ -405,9 +403,7 @@ int USBSID_Class::USBSID_GetPCBVersion(void)
   if (!us_Initialised) return 0;
   if (pcbversion == -1) {
     uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x81, 0x1, 0, 0, 0};
-    /* fprintf(stderr, "[USBSID] Start PCB version write\n"); */
     USBSID_SingleWrite(configbuff, 6);
-    /* fprintf(stderr, "[USBSID] Start PCB version read\n"); */
     pcbversion = USBSID_SingleReadConfig(result, 1);
   }
   return pcbversion;
@@ -442,7 +438,7 @@ void USBSID_Class::USBSID_ToggleStereo(void)
 
 /* SYNCHRONOUS */
 
-void USBSID_Class::USBSID_SingleWrite(unsigned char *buff, size_t len)
+void USBSID_Class::USBSID_SingleWrite(unsigned char *buff, int len)
 {
   if (!us_Initialised) return;
   int actual_length = 0;
@@ -472,12 +468,11 @@ unsigned char USBSID_Class::USBSID_SingleRead(uint8_t reg)
   return result[0];
 }
 
-unsigned char USBSID_Class::USBSID_SingleReadConfig(unsigned char *buff, size_t len)
+unsigned char USBSID_Class::USBSID_SingleReadConfig(unsigned char *buff, int len)
 {
   if (!us_Initialised) return 0;
   int actual_length;
   rc = libusb_bulk_transfer(devh, EP_IN_ADDR, buff, len, &actual_length, 0);
-  /* fprintf(stderr, "[USBSID] ReadConfig: rc=%d actual_length=%d buff[0]=%d\n", rc, actual_length, buff[0]); */
   if (rc == LIBUSB_ERROR_TIMEOUT) {
     USBERR(stderr, "[USBSID] Timeout error while reading (%d)\n", actual_length);
     return 0;
@@ -486,10 +481,6 @@ unsigned char USBSID_Class::USBSID_SingleReadConfig(unsigned char *buff, size_t 
       rc, libusb_error_name(rc), libusb_strerror(rc));
     return 0;
   }
-/*   if (actual_length == 0) {
-    USBERR(stderr, "[USBSID] Zero-length read completed (kext consumed data?), retrying\n");
-    return USBSID_SingleReadConfig(buff, len);  // retry once
-  } */
   return *buff;
 }
 
@@ -1256,7 +1247,7 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
 
   /* Check for an available USBSID-Pico */
   if (LIBUSB_Available(ctx, VENDOR_ID, PRODUCT_ID) <= 0) {
-    USBERR(stderr, "[USBSID] USBSID-Pico not connected\n");
+    USBDBG(stderr, "[USBSID] USBSID-Pico not connected\n");
     goto out;
   }
 
