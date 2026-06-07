@@ -14,6 +14,8 @@ public enum Cmd {
   COMMAND((byte)3),   /*       0b11 ~ 0xC0 */
   /* BYTE 0 - lower 6 bits for byte count */
   /* BYTE 0 - lower 6 bits for Commands */
+  CYCLED_READ((byte)4),   /*      0b100 ~ 0x04 */
+  DELAY_CYCLES((byte)5),   /*      0b101 ~ 0x05 */
   PAUSE((byte)10),   /*     0b1010 ~ 0x0A */
   UNPAUSE((byte)11),   /*     0b1011 ~ 0x0B */
   MUTE((byte)12),   /*     0b1100 ~ 0x0C */

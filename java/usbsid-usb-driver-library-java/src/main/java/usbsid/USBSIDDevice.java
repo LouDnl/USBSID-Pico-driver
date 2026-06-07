@@ -62,6 +62,7 @@ public class USBSIDDevice {
   public static boolean us_overrideDriver = false;
   private static boolean us_isUSBX = false;
   private static boolean us_isLIBUSB = false;
+  private static boolean us_useUsbDk = true;
   private static boolean us_isAvailable = false;
   private static boolean us_isOpen = false;
 
@@ -89,6 +90,15 @@ public class USBSIDDevice {
       device = xdevice;
       config = xdevice.getUsbConfiguration(US_CFG);
       iface = config.getUsbInterface(US_ITF);
+      if (iface.isClaimed()) {
+        try {
+          logger.fine("Found unreleased interface, releasing.");
+          iface.release();
+        } catch (UsbException e) {
+          logger.fine("Releasing interface failed, forcing release.");
+          forceReleaseClaim(iface);
+        }
+      }
       iface.claim(new UsbInterfacePolicy()
       {
         @Override
@@ -110,13 +120,71 @@ public class USBSIDDevice {
     private static void closeUSBX()
       throws UsbException
     {
-      if (pipe_in != null) pipe_in.close();
-      if (pipe_out != null) pipe_out.close();
-      try {
-        if (iface.isClaimed()) iface.release();
-      } catch (javax.usb.UsbPlatformException uPE) {
-        logger.info("Device not found for re-attaching kernel, skipping.");
+      us_isOpen = false;
+      try { if (pipe_in != null) pipe_in.close(); } catch (UsbException e) { /* disconnected */ }
+      try { if (pipe_out != null) pipe_out.close(); } catch (UsbException e) { /* disconnected */ }
+      if (iface != null && iface.isClaimed()) {
+        try { iface.release(); } catch (UsbException e) {
+          logger.fine("Releasing interface failed, forcing release.");
+          forceReleaseClaim(iface);
+        }
       }
+    }
+
+    private static void forceReleaseClaim(UsbInterface iface) {
+      try {
+        int ifaceNum = iface.getUsbInterfaceDescriptor().bInterfaceNumber() & 0xFF;
+        /* Path: Interface.configuration -> Configuration.device -> AbstractDevice.claimedInterfaces */
+        Object abstractDevice = getReflectField(getReflectField(iface, "configuration"), "device");
+        if (abstractDevice == null) { logger.warning("forceReleaseClaim: AbstractDevice not found"); return; }
+        /* Find claimed-interfaces Set field (name varies by usb4java version: claimedInterfaceNumbers / claimedInterfaces) */
+        java.lang.reflect.Field claimedField = null;
+        Class<?> cls = abstractDevice.getClass();
+        byte ifaceNumByte = (byte) ifaceNum;
+        while (cls != null && claimedField == null) {
+          for (java.lang.reflect.Field f : cls.getDeclaredFields()) {
+            if (java.util.Set.class.isAssignableFrom(f.getType())) {
+              f.setAccessible(true);
+              Object val = f.get(abstractDevice);
+              if (val instanceof java.util.Set) {
+                java.util.Set<?> s = (java.util.Set<?>) val;
+                if (s.contains(ifaceNum) || s.contains(ifaceNumByte) || s.contains((Integer) ifaceNum)) {
+                  claimedField = f;
+                  break;
+                }
+              }
+            }
+          }
+          cls = cls.getSuperclass();
+        }
+        if (claimedField == null) {
+          logger.warning("forceReleaseClaim: claimed-interfaces Set field not found in " + abstractDevice.getClass().getName());
+          return;
+        }
+        claimedField.setAccessible(true);
+        @SuppressWarnings("rawtypes")
+        java.util.Set claimed = (java.util.Set) claimedField.get(abstractDevice);
+        claimed.remove(ifaceNum);
+        claimed.remove(ifaceNumByte);
+        logger.info("Force-cleared stale usb4java claim state for interface " + ifaceNum);
+      } catch (Exception e) {
+        logger.warning("forceReleaseClaim failed: " + e.getMessage());
+      }
+    }
+
+    private static Object getReflectField(Object obj, String name) {
+      if (obj == null) return null;
+      try {
+        Class<?> cls = obj.getClass();
+        while (cls != null) {
+          try {
+            java.lang.reflect.Field f = cls.getDeclaredField(name);
+            f.setAccessible(true);
+            return f.get(obj);
+          } catch (NoSuchFieldException e) { cls = cls.getSuperclass(); }
+        }
+      } catch (Exception e) { /* ignore */ }
+      return null;
     }
 
     private static UsbDevice findUSBSIDX(UsbHub hub)
@@ -189,7 +257,7 @@ public class USBSIDDevice {
     private static ByteBuffer out_buffer = null;
 
     private static int len_out_buffer = 64;
-    private static int timeout = 0;
+    private static int timeout = 2000;
     private static int LIBUSB_OPTION_LOG_LEVEL = 0;
     private static int LIBUSB_OPTION_USE_USBDK = 1;
     private static short ACM_CTRL_DTR = 0x01;
@@ -206,7 +274,7 @@ public class USBSIDDevice {
       if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to initialize libusb.", result);
 
       LibUsb.setOption(ctx, LIBUSB_OPTION_LOG_LEVEL, 0); /* 4 for max verbose logging */
-      LibUsb.setOption(ctx, LIBUSB_OPTION_USE_USBDK, 1); /* 1 to enable */
+      if (us_useUsbDk) LibUsb.setOption(ctx, LIBUSB_OPTION_USE_USBDK, 1);
 
       result = findLUSBSID(VENDOR_ID, PRODUCT_ID);
       if (ldevice == null) {
@@ -462,6 +530,10 @@ public class USBSIDDevice {
         break;
       case "libusb":
         us_isLIBUSB = true;
+        break;
+      case "libusb-winusb":
+        us_isLIBUSB = true;
+        us_useUsbDk = false;
         break;
       default:
         us_isUSBX = true;

@@ -71,6 +71,7 @@ public class Config /* implements IConfig */ {
     RELOAD_CONFIG((byte)0x38),  /* Reload and apply stored config from flash */
     READ_NUMSIDS((byte)0x39),  /* Returns the number of SIDs in byte 0 */
     READ_FMOPLSID((byte)0x3A),  /* Returns the sidno for FMOpl 1~4, 0 is disable  */
+    READ_CONFIGACK((byte)0x3F),  /* Returns 1 if socket power is disabled and read/writes are dropped */
 
     SINGLE_SID((byte)0x40),  /* Single SID Socket One */
     DUAL_SID((byte)0x41),  /* Dual SID Socket One */
@@ -80,6 +81,11 @@ public class Config /* implements IConfig */ {
     MIRRORED_SID((byte)0x45),  /* Socket Two is linked to Socket One */
     DUAL_SOCKET1((byte)0x46),  /* Two SID's in socket One, Socket Two disabled */
     DUAL_SOCKET2((byte)0x47),  /* Two SID's in socket Two, Socket One disabled */
+    DUAL_FLIPPED((byte)0x48),  /* Two SID's in 2 sockets, sockets flipped */
+    QUAD_FLIPPED((byte)0x49),  /* Four SID's in 2 sockets, sockets flipped */
+    QUAD_MIXED((byte)0x4A),  /* Four SID's in 2 sockets, mixed addresses */
+    QUAD_FLIPMIX((byte)0x4B),  /* Four SID's in 2 sockets, sockets flipped and addresses flipped */
+    HOTFLIP_SOCKETS((byte)0x4F),  /* Socket Two is Socket One and vice versa */
 
     SET_CLOCK((byte)0x50),  /* Change SID clock frequency by array id */
     DETECT_SIDS((byte)0x51),  /* Try to detect the SID types per socket */
@@ -91,6 +97,8 @@ public class Config /* implements IConfig */ {
     GET_CLOCK((byte)0x57),  /* Returns the clockrate as array id in byte 0 */
     LOCK_CLOCK((byte)0x58),  /* Locks the clockrate from being changed, saved in config */
     STOP_TESTS((byte)0x59),  /* Interrupt any running SID tests */
+    DETECT_CLONES((byte)0x5A),  /* Detect clone SID types */
+    AUTO_DETECT((byte)0x5B),  /* Run auto detection routine (fallback/workaround for rp2350 bug) */
 
     LOAD_MIDI_STATE((byte)0x60),
     SAVE_MIDI_STATE((byte)0x61),
@@ -103,7 +111,12 @@ public class Config /* implements IConfig */ {
     RESTART_BUS_CLK((byte)0x86),  /* Restart PIO clocks */
     SYNC_PIOS((byte)0x87),  /* Sync PIO clocks */
     TOGGLE_AUDIO((byte)0x88),  /* Toggle mono <-> stereo (v1.3+ boards only) */
-    SET_AUDIO((byte)0x89),;  /* Set mono <-> stereo (v1.3+ boards only) */
+    SET_AUDIO((byte)0x89),  /* Set mono <-> stereo (v1.3+ boards only) */
+    LOCK_AUDIO((byte)0x90),  /* Locks the audio switch into it's current state (v1.3+ boards only) */
+    GET_AUDIO((byte)0x91),  /* Get current audio switch setting */
+
+    CONFIG_ACK((byte)0xFA),  /* Acknowledge the current configuration and switch on regulators (v1.5+ boards only) */
+    SOCKET_DETECT((byte)0xFD),;  /* Disable/enable automatic socket change detection on boot (v1.5+ boards only) */
 
     private byte cmd;
     private Cfg(byte cmd) { this.cmd = cmd; }

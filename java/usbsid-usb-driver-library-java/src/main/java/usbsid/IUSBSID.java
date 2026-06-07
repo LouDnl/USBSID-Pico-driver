@@ -16,6 +16,10 @@ public interface IUSBSID {
 
   void USBSID_reset(byte volume);
 
+  void USBSID_sendconfigcommand(int command, Byte...args);
+
+  byte[] USBSID_rwconfigcommand(int command, int len, Byte...args);
+
   void USBSID_setclock(double CpuClock);
 
   int USBSID_setstereo(int stereo);

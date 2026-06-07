@@ -259,6 +259,30 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
   }
 
   @Override
+  public void USBSID_sendconfigcommand(int command, Byte...args)
+  {
+    try {
+      sendConfigCommand(command, args);
+    } catch (Exception E) {
+      logger.severe("[USBSID] Unhandled exception occured: " + E);
+      E.printStackTrace();
+    }
+  }
+
+  @Override
+  public byte[] USBSID_rwconfigcommand(int command, int len, Byte...args)
+  {
+    byte[] cfgread = null;
+    try {
+      cfgread = rwConfigCommand(command, len, args);
+    } catch (Exception E) {
+      logger.severe("[USBSID] Unhandled exception occured: " + E);
+      E.printStackTrace();
+    }
+    return cfgread;
+  }
+
+  @Override
   public void USBSID_reset(byte volume)
   {
     try {

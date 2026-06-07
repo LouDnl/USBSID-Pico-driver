@@ -6,9 +6,11 @@ mvn clean install
 
 # Replace jsidplay2 driver
 ## MAIN
-cp /home/loud/.m2/repository/usbsid/usbsid-usb-driver-library-java/1.0/usbsid-usb-driver-library-java-1.0.jar /mnt/loud/Code/Development/c64/sidplaytrack/jsidplay/svn.jsidplay2-code/jsidplay2/target/standalone/usbsid-usb-driver-library-java-1.0.jar
+VER=1.1;
+cp /home/loud/.m2/repository/usbsid/usbsid-usb-driver-library-java/$VER/usbsid-usb-driver-library-java-$VER.jar /mnt/loud/Code/Development/c64/sidplaytrack/jsidplay/svn.jsidplay2-code/jsidplay2/target/standalone/usbsid-usb-driver-library-java-$VER.jar
 ## THINKPAD
-cp /home/loud/.m2/repository/usbsid/usbsid-usb-driver-library-java/1.0/usbsid-usb-driver-library-java-1.0.jar /home/loud/Development/c64/svn.jsidplay2-code/jsidplay2/target/standalone/usbsid-usb-driver-library-java-1.0.jar
+VER=1.1;
+cp /home/loud/.m2/repository/usbsid/usbsid-usb-driver-library-java/$VER/usbsid-usb-driver-library-java-$VER.jar /home/loud/Development/c64/svn.jsidplay2-code/jsidplay2/target/standalone/usbsid-usb-driver-library-java-$VER.jar
 
 # Or in one line
 ## MAIN
