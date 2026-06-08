@@ -50,6 +50,7 @@ public class USBSIDDevice {
   /* Device constants */
   private static byte US_CFG = 1;
   private static byte US_ITF = 1;
+  private static byte US_VDR_ITF = 4;
   private static byte US_EPOUT = (byte)0x02;
   private static byte US_EPIN = (byte)0x82;
   private static byte US_VDR_EPOUT = (byte)0x04;
@@ -261,6 +262,7 @@ public class USBSIDDevice {
     private static ByteBuffer out_buffer = null;
     private static byte ep_out = 0;
     private static byte ep_in = 0;
+    private static byte[] claim_itfs = {0, 1};
 
     private static int len_out_buffer = 64;
     private static int timeout = 2000;
@@ -278,10 +280,17 @@ public class USBSIDDevice {
       if (us_useUsbDk) {
         ep_out = US_EPOUT;
         ep_in = US_EPIN;
+        claim_itfs = new byte[]{0, US_ITF};
         logger.info("[USBSID] Using LIBUSB with USBDK");
-      } else {
+      } else if (us_isLIBUSBvdr) {
         ep_out = US_VDR_EPOUT;
         ep_in = US_VDR_EPIN;
+        claim_itfs = new byte[]{US_VDR_ITF};
+        logger.info("[USBSID] Using LIBUSB with Vendor endpoint");
+      } else {
+        ep_out = US_EPOUT;
+        ep_in = US_EPIN;
+        claim_itfs = new byte[]{0, US_ITF};
         logger.info("[USBSID] Using LIBUSB");
       }
 
@@ -328,7 +337,7 @@ public class USBSIDDevice {
     {
       us_isOpen = false;
       deinitOutBuffer();
-      int result = LibUsb.releaseInterface(devh, US_ITF);
+      int result = LibUsb.releaseInterface(devh, claim_itfs[claim_itfs.length - 1]);
       if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to release interface", result);
       if (kernel_isDetached) {
         releaseInterface();
@@ -404,7 +413,7 @@ public class USBSIDDevice {
 
     private static void detachKernelDriver()
     {
-      for (int itf = 0; itf < 2; itf++) {
+      for (byte itf : claim_itfs) {
         if (LibUsb.kernelDriverActive(devh, itf) == 1) {
           try {
             result = LibUsb.detachKernelDriver(devh, itf);
@@ -425,7 +434,7 @@ public class USBSIDDevice {
 
     private static void releaseInterface()
     {
-      for (int itf = 0; itf < 2; itf++) {
+      for (byte itf : claim_itfs) {
         if (LibUsb.kernelDriverActive(devh, itf) == 1) {
           try {
             result = LibUsb.detachKernelDriver(devh, itf);
