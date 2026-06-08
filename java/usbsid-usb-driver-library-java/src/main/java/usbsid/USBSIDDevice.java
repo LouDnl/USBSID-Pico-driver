@@ -537,7 +537,7 @@ public class USBSIDDevice {
     } else {
       us_isLIBUSB = true;  /* Winblows fallback */
       us_useUsbDk = true;
-      us_isLIBUSBvdr = false
+      us_isLIBUSBvdr = false;
     }
   }
 
@@ -552,7 +552,7 @@ public class USBSIDDevice {
       case "libusb":
         us_isLIBUSB = true;
         us_useUsbDk = true;
-        us_isLIBUSBvdr = false
+        us_isLIBUSBvdr = false;
         break;
       case "libusb-winusb":
         us_isLIBUSB = true;
