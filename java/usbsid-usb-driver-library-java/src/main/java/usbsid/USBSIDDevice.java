@@ -80,11 +80,12 @@ public class USBSIDDevice {
     private static void openUSBX()
       throws UsbException
     {
+      logger.info("[USBSID] Using USBX");
       xdevice = findUSBSIDX(
           UsbHostManager.getUsbServices().getRootUsbHub());
       if (xdevice == null)
       {
-          logger.warning("USBSID-Pico not found");
+          logger.warning("[USBSID] USBSID-Pico not found");
           return;
       }
       device = xdevice;
@@ -92,10 +93,10 @@ public class USBSIDDevice {
       iface = config.getUsbInterface(US_ITF);
       if (iface.isClaimed()) {
         try {
-          logger.fine("Found unreleased interface, releasing.");
+          logger.fine("[USBSID] Found unreleased interface, releasing.");
           iface.release();
         } catch (UsbException e) {
-          logger.fine("Releasing interface failed, forcing release.");
+          logger.fine("[USBSID] Releasing interface failed, forcing release.");
           forceReleaseClaim(iface);
         }
       }
@@ -125,7 +126,7 @@ public class USBSIDDevice {
       try { if (pipe_out != null) pipe_out.close(); } catch (UsbException e) { /* disconnected */ }
       if (iface != null && iface.isClaimed()) {
         try { iface.release(); } catch (UsbException e) {
-          logger.fine("Releasing interface failed, forcing release.");
+          logger.fine("[USBSID] Releasing interface failed, forcing release.");
           forceReleaseClaim(iface);
         }
       }
@@ -136,7 +137,7 @@ public class USBSIDDevice {
         int ifaceNum = iface.getUsbInterfaceDescriptor().bInterfaceNumber() & 0xFF;
         /* Path: Interface.configuration -> Configuration.device -> AbstractDevice.claimedInterfaces */
         Object abstractDevice = getReflectField(getReflectField(iface, "configuration"), "device");
-        if (abstractDevice == null) { logger.warning("forceReleaseClaim: AbstractDevice not found"); return; }
+        if (abstractDevice == null) { logger.warning("[USBSID] forceReleaseClaim: AbstractDevice not found"); return; }
         /* Find claimed-interfaces Set field (name varies by usb4java version: claimedInterfaceNumbers / claimedInterfaces) */
         java.lang.reflect.Field claimedField = null;
         Class<?> cls = abstractDevice.getClass();
@@ -158,7 +159,7 @@ public class USBSIDDevice {
           cls = cls.getSuperclass();
         }
         if (claimedField == null) {
-          logger.warning("forceReleaseClaim: claimed-interfaces Set field not found in " + abstractDevice.getClass().getName());
+          logger.warning("[USBSID] forceReleaseClaim: claimed-interfaces Set field not found in " + abstractDevice.getClass().getName());
           return;
         }
         claimedField.setAccessible(true);
@@ -166,9 +167,9 @@ public class USBSIDDevice {
         java.util.Set claimed = (java.util.Set) claimedField.get(abstractDevice);
         claimed.remove(ifaceNum);
         claimed.remove(ifaceNumByte);
-        logger.info("Force-cleared stale usb4java claim state for interface " + ifaceNum);
+        logger.info("[USBSID] Force-cleared stale usb4java claim state for interface " + ifaceNum);
       } catch (Exception e) {
-        logger.warning("forceReleaseClaim failed: " + e.getMessage());
+        logger.warning("[USBSID] forceReleaseClaim failed: " + e.getMessage());
       }
     }
 
@@ -269,6 +270,12 @@ public class USBSIDDevice {
     private static void openLIBUSB()
       throws LibUsbException
     {
+      if (us_useUsbDk) {
+        logger.info("[USBSID] Using LIBUSB with USBDK");
+      } else {
+        logger.info("[USBSID] Using LIBUSB");
+      }
+
       ctx = new Context();
       result = LibUsb.init(ctx);
       if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to initialize libusb.", result);
@@ -278,7 +285,7 @@ public class USBSIDDevice {
 
       result = findLUSBSID(VENDOR_ID, PRODUCT_ID);
       if (ldevice == null) {
-        logger.warning("USBSID-Pico not found");
+        logger.warning("[USBSID] USBSID-Pico not found");
         return;
       }
       if ((ldevice != null) && us_isAvailable) {
@@ -352,7 +359,7 @@ public class USBSIDDevice {
         ByteBuffer buffer = ByteBuffer.allocateDirect(0);
         result = LibUsb.controlTransfer(devh, (byte)0x21, (byte)0x22, (short)(ACM_CTRL_DTR | ACM_CTRL_RTS), (short)0, buffer, (long)100);
       } catch (LibUsbException LUE) {
-        logger.info("CONFIG ERROR: " + result);
+        logger.info("[USBSID] CONFIG ERROR: " + result);
       }
     }
 
@@ -462,13 +469,12 @@ public class USBSIDDevice {
         ByteBuffer b_out = ByteBuffer.allocateDirect(buffer.length);
         b_out.put(buffer);
         IntBuffer t_out = IntBuffer.allocate(1);
-        result = LibUsb.bulkTransfer(devh, US_EPOUT, b_out, t_out, timeout);
+        int r_out = LibUsb.bulkTransfer(devh, US_EPOUT, b_out, t_out, timeout);
+        if (r_out != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] OUT transfer failed", r_out);
         ByteBuffer data = ByteBuffer.allocateDirect(len);
         IntBuffer t_in = IntBuffer.allocate(1);
-        int result = LibUsb.bulkTransfer(devh, US_EPIN, data, t_in, timeout);
-        if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Transfer failed", result);
-        result = LibUsb.handleEventsTimeout(null, timeout);
-        if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to handle events", result);
+        int r_in = LibUsb.bulkTransfer(devh, US_EPIN, data, t_in, timeout);
+        if (r_in != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] IN transfer failed", r_in);
         byte[] b_temp = new byte[data.remaining()];
         data.get(b_temp);
         byte[] b_in = Arrays.copyOfRange(b_temp, 0, (len/2));
@@ -634,8 +640,7 @@ public class USBSIDDevice {
       try {
         r = USBL.syncReadL(buffer, len);
       } catch (LibUsbException LUE) {
-        logger.warning("[USBSID] Exception occured: " + LUE);
-        LUE.printStackTrace();
+        throw new RuntimeException("[USBSID] syncRead failed: " + LUE.getMessage() + " (libusb error " + LUE.getErrorCode() + ")", LUE);
       }
     }
    return r;
