@@ -52,6 +52,8 @@ public class USBSIDDevice {
   private static byte US_ITF = 1;
   private static byte US_EPOUT = (byte)0x02;
   private static byte US_EPIN = (byte)0x82;
+  private static byte US_VDR_EPOUT = (byte)0x04;
+  private static byte US_VDR_EPIN = (byte)0x84;
   private static short VENDOR_ID = (short)0xCAFE;
   private static short PRODUCT_ID = (short)0x4011;
 
@@ -62,6 +64,7 @@ public class USBSIDDevice {
   public static boolean us_overrideDriver = false;
   private static boolean us_isUSBX = false;
   private static boolean us_isLIBUSB = false;
+  private static boolean us_isLIBUSBvdr = false;
   private static boolean us_useUsbDk = true;
   private static boolean us_isAvailable = false;
   private static boolean us_isOpen = false;
@@ -256,6 +259,8 @@ public class USBSIDDevice {
     private static DeviceHandle devh = null;
     private static Transfer transfer_out = null;
     private static ByteBuffer out_buffer = null;
+    private static byte ep_out = 0;
+    private static byte ep_in = 0;
 
     private static int len_out_buffer = 64;
     private static int timeout = 2000;
@@ -271,8 +276,12 @@ public class USBSIDDevice {
       throws LibUsbException
     {
       if (us_useUsbDk) {
+        ep_out = US_EPOUT;
+        ep_in = US_EPIN;
         logger.info("[USBSID] Using LIBUSB with USBDK");
       } else {
+        ep_out = US_VDR_EPOUT;
+        ep_in = US_VDR_EPIN;
         logger.info("[USBSID] Using LIBUSB");
       }
 
@@ -295,6 +304,11 @@ public class USBSIDDevice {
           String error = "[USBSID] Opening device unsuccessful";
           logger.severe(error);
           throw(new LibUsbException(error, result));
+        }
+        if (devh == null) {
+          String error = "[USBSID] Opening device unsuccessful, no device handle";
+          logger.severe(error);
+          throw(new LibUsbException(error, LibUsb.ERROR_NO_DEVICE));
         }
       } else {
         device = null;
@@ -373,7 +387,7 @@ public class USBSIDDevice {
         out_buffer = BufferUtils.allocateByteBuffer(len_out_buffer);
       }
       transfer_out = LibUsb.allocTransfer();
-      LibUsb.fillBulkTransfer(transfer_out, devh, US_EPOUT, out_buffer, usb_out, null, timeout);
+      LibUsb.fillBulkTransfer(transfer_out, devh, ep_out, out_buffer, usb_out, null, timeout);
     }
 
     private static void deinitOutBuffer()
@@ -451,7 +465,7 @@ public class USBSIDDevice {
         ByteBuffer b = ByteBuffer.allocateDirect(buffer.length);
         b.put(buffer);
         IntBuffer transfered = IntBuffer.allocate(1);
-        result = LibUsb.bulkTransfer(devh, US_EPOUT, b, transfered, timeout);
+        result = LibUsb.bulkTransfer(devh, ep_out, b, transfered, timeout);
         if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Transfer failed", result);
         result = LibUsb.handleEventsTimeout(null, timeout);
         if (result != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] Unable to handle events", result);
@@ -469,11 +483,11 @@ public class USBSIDDevice {
         ByteBuffer b_out = ByteBuffer.allocateDirect(buffer.length);
         b_out.put(buffer);
         IntBuffer t_out = IntBuffer.allocate(1);
-        int r_out = LibUsb.bulkTransfer(devh, US_EPOUT, b_out, t_out, timeout);
+        int r_out = LibUsb.bulkTransfer(devh, ep_out, b_out, t_out, timeout);
         if (r_out != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] OUT transfer failed", r_out);
         ByteBuffer data = ByteBuffer.allocateDirect(len);
         IntBuffer t_in = IntBuffer.allocate(1);
-        int r_in = LibUsb.bulkTransfer(devh, US_EPIN, data, t_in, timeout);
+        int r_in = LibUsb.bulkTransfer(devh, ep_in, data, t_in, timeout);
         if (r_in != LibUsb.SUCCESS) throw new LibUsbException("[USBSID] IN transfer failed", r_in);
         byte[] b_temp = new byte[data.remaining()];
         data.get(b_temp);
@@ -522,9 +536,10 @@ public class USBSIDDevice {
       us_isUSBX = true;  /* Perfect for Linux! but no worky on poor Winblows */
     } else {
       us_isLIBUSB = true;  /* Winblows fallback */
+      us_useUsbDk = true;
+      us_isLIBUSBvdr = false
     }
   }
-
 
   /* Public woohah */
 
@@ -536,10 +551,18 @@ public class USBSIDDevice {
         break;
       case "libusb":
         us_isLIBUSB = true;
+        us_useUsbDk = true;
+        us_isLIBUSBvdr = false
         break;
       case "libusb-winusb":
         us_isLIBUSB = true;
         us_useUsbDk = false;
+        us_isLIBUSBvdr = false;
+        break;
+      case "libusb-vendor":
+        us_isLIBUSB = true;
+        us_useUsbDk = false;
+        us_isLIBUSBvdr = true;
         break;
       default:
         us_isUSBX = true;
