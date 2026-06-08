@@ -1,3 +1,36 @@
+# Patched libusb4java native libs (Windows)
+
+Stock `org.usb4java:libusb4java:1.3.0` win32 jars from Maven Central bundle a
+statically-linked libusb core compiled ~Oct 2018 (pre libusb 1.0.24). That core
+lacks `WinUsb_GetAssociatedInterface` support, so claiming a second interface of
+an IAD-grouped composite function (our CDC control+data) fails with
+`LIBUSB_ERROR_NOT_SUPPORTED` (-12) on Windows — even though native C apps linking
+a modern system libusb (1.0.26/1.0.27) claim it fine.
+
+`lib/libusb4java-1.3.0-win32-x86-64.jar` and `lib/libusb4java-1.3.0-win32-x86.jar`
+contain a patched/rebuilt `libusb4java.dll` linked against a modern libusb core.
+They must be installed into `~/.m2` to **override** the stock Central jars before
+`mvn clean install` of this project, otherwise the old DLL gets pulled in:
+
+```shell
+mvn -q -o install:install-file -Dfile=lib/libusb4java-1.3.0-win32-x86-64.jar \
+  -DgroupId=org.usb4java -DartifactId=libusb4java -Dversion=1.3.0 \
+  -Dclassifier=win32-x86-64 -Dpackaging=jar
+
+mvn -q -o install:install-file -Dfile=lib/libusb4java-1.3.0-win32-x86.jar \
+  -DgroupId=org.usb4java -DartifactId=libusb4java -Dversion=1.3.0 \
+  -Dclassifier=win32-x86 -Dpackaging=jar
+```
+
+Verify the override took (patched DLL is ~436736 bytes, stock is 385024):
+
+```shell
+unzip -p ~/.m2/repository/org/usb4java/libusb4java/1.3.0/libusb4java-1.3.0-win32-x86-64.jar \
+  org/usb4java/win32-x86-64/libusb4java.dll | wc -c
+```
+
+Only needs doing once per `~/.m2` (e.g. after a fresh checkout or `mvn dependency:purge-local-repository`).
+
 # Tips
 
 ```shell
