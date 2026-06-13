@@ -39,11 +39,17 @@ import javax.usb.UsbHub;
 
 public class USBSIDDevice {
 
-  /* Logging */
+  /* When not directly developing for the driver, do NOT call
+     System.setProperty("java.util.logging.SimpleFormatter.format", ...) here:
+     SimpleFormatter.format is a JVM-wide property and any host application (e.g. the
+     USBSID Configtool) configures its own format via logging.properties. Forcing a format
+     in driver static init would override the host's format globally. The logger is
+     identified by class name (usbsid.USBSIDDevice) so the host's format slot %3$s
+     ("logger name") attributes driver messages to the driver namespace. */
   private static Logger logger = null;
   static {
-    System.setProperty("java.util.logging.SimpleFormatter.format",
-                "[%1$tF %1$tT] [USBSID] [%4$s] %5$s %n");
+    // System.setProperty("java.util.logging.SimpleFormatter.format",
+    //             "[%1$tF %1$tT] [USBSID] [%4$s] %5$s %n");
     logger = Logger.getLogger(USBSIDDevice.class.getName());
   }
 
