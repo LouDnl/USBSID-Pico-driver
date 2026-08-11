@@ -1158,7 +1158,7 @@ int USBSID_Class::LIBUSB_OpenDevice(void)
    * automatically around libusb_claim_interface / libusb_release_interface. */
   rc = libusb_set_auto_detach_kernel_driver(devh, 1);
   if (rc == LIBUSB_ERROR_NOT_SUPPORTED) {
-    /* Not supported on this platform (Windows/older libusb) — ignore */
+    /* Not supported on this platform (Windows/older libusb) - ignore */
     rc = 0;
   } else if (rc < 0) {
     USBERR(stderr, "[USBSID] Error setting auto detach kernel driver: %d %s: %s\r\n", rc, libusb_error_name(rc), libusb_strerror(rc));
@@ -1181,12 +1181,12 @@ void USBSID_Class::LIBUSB_CloseDevice(void)
     int start_if = 0;
     int end_if = 2;
 
-    for (int if_num = start_if; if_num < end_if; if_num++) {
-      if (libusb_kernel_driver_active(devh, if_num)) {
-        rc = libusb_detach_kernel_driver(devh, if_num);
-        USBERR(stderr, "[USBSID] Error, in libusb_detach_kernel_driver: %d, %s: %s\n", rc, libusb_error_name(rc), libusb_strerror(rc));
-      }
-      rc = libusb_release_interface(devh, if_num);
+    libusb_release_interface(devh, 0);
+    libusb_release_interface(devh, 1);
+
+    rc = libusb_attach_kernel_driver(devh, 0);
+    if (rc < 0 && rc != LIBUSB_ERROR_NOT_FOUND) {
+      fprintf(stderr, "Attach error on interface 0: %s\n", libusb_error_name(rc));
     }
 #endif
     libusb_close(devh);
@@ -1241,7 +1241,7 @@ int USBSID_Class::LIBUSB_DetachKernelDriver(void)
     end_if = 2;
 #endif
   for (int if_num = start_if; if_num < end_if; if_num++) {
-    if (libusb_kernel_driver_active(devh, if_num)) {
+    if (libusb_kernel_driver_active(devh, if_num) == 1) {
       libusb_detach_kernel_driver(devh, if_num);
     }
     rc = libusb_claim_interface(devh, if_num);
@@ -1497,7 +1497,7 @@ int USBSID_Class::LIBUSB_Exit(void)
   if (ctx) {
     libusb_exit(ctx);
   }
-    ctx = NULL;
+  ctx = NULL;
   rc = -1;
   devh = NULL;
   USBDBG(stdout, "[USBSID] Closed USB device\r\n");
