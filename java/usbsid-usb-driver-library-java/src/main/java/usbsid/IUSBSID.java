@@ -14,6 +14,10 @@ public interface IUSBSID {
 
   void USBSID_setflush();
 
+  public void USBSID_resetringbuffer();
+
+  public void USBSID_resetallregisters();
+
   void USBSID_reset(byte volume);
 
   void USBSID_sendconfigcommand(int command, Byte...args);

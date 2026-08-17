@@ -82,7 +82,7 @@ public class ConnectTest
       return;
 
     final byte[] socketcfg = usbsid.USBSID_getsocketconfig();
-    if (checkforError(() -> socketcfg.length == 10, MessageFormat.format("Read socket config: {0}", Arrays.toString(socketcfg))))
+    if (checkforError(() -> socketcfg.length == 12, MessageFormat.format("Read socket config: {0}", Arrays.toString(socketcfg))))
       return;
 
     final int s1s1 = usbsid.USBSID_getsocketsidtype(1, 1, socketcfg);

@@ -37,8 +37,10 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
   private final int min_ring_diff = 16;
   private final int default_ring_diff = 64;
   private final int default_ring_diffwin = 64;
-  private final int default_ring_size = 256;  /* Init default buffer size */
+  private final int default_ring_size = 8192;  /* Init default buffer size */
   private final int default_ring_sizewin = 8192;  /* Init default buffer size */
+  private final int rec = 4;  /* 4 bytes per cycled write */
+  private final int cap = 61;  /* 61 bytes max in a cycled packet */
   private static int diff_size = 0;
   private static int ring_size = 0;
 
@@ -104,6 +106,18 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
     throws Exception
   { /* Only call this from the Thread loop! */
     try {
+      if (!flush_buffer) {
+        flush_buffer = false;
+        return;
+      }
+      int waiting = (ring_write -ring_read
+                    + ring_size) % ring_size;
+      while (waiting >= rec && (buffer_pos + rec) <= cap) {
+        for (int i = 0; i < rec; i++) {
+          thread_buffer[buffer_pos++] = get();
+        }
+        waiting -= rec;
+      }
       // logger.info("Flushbuffer called! @ pos: {0}", buffer_pos);
       thread_buffer[0] = (byte)((Cmd.CYCLED_WRITE.get() << 6) | (buffer_pos - 1));
       final byte[] out_buffer = thread_buffer.clone();
@@ -265,6 +279,13 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
   }
 
   @Override
+  public void USBSID_resetringbuffer() {
+    ring_read = ring_write = 0;
+    buffer_pos = 1;  /* drop the partly built packet too */
+    flush_buffer = false;
+  }
+
+  @Override
   public void USBSID_sendconfigcommand(int command, Byte...args)
   {
     try {
@@ -296,11 +317,26 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
         logger.warning("[USBSID] Device is not open!");
         return;
       }
-      /* BUG: SKPICO WILL HAVE VOLUME AT 0 DUE TO NOT RESETTING FAST ENOUGH! */
+      /* ISSUE: SKPICO WILL HAVE VOLUME AT 0 DUE TO NOT RESETTING FAST ENOUGH! */
       sendCommand(Cmd.RESET_SID.get(), (byte)0x0);
       if ((byte)volume == 0) sendCommand(Cmd.MUTE.get());
       if ((byte)volume > 0) sendCommand(Cmd.UNMUTE.get());
-      flush_buffer = true;
+      timeSync();
+    } catch (Exception E) {
+      logger.severe("[USBSID] Exception occured: " + E);
+      E.printStackTrace();
+      return;
+    }
+  }
+  @Override
+  public void USBSID_resetallregisters()
+  {
+    try {
+      if (device == null || !isOpen()) {
+        logger.warning("[USBSID] Device is not open!");
+        return;
+      }
+      sendCommand(Cmd.RESET_SID.get(), (byte)0x1);
       timeSync();
     } catch (Exception E) {
       logger.severe("[USBSID] Exception occured: " + E);
@@ -355,7 +391,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
   {
     byte[] socketcfg = null;
     try {
-      socketcfg = rwConfigCommand(Cfg.READ_SOCKETCFG.get(), 10);
+      socketcfg = rwConfigCommand(Cfg.READ_SOCKETCFG.get(), 12);
     } catch (Exception E) {
       logger.severe("[USBSID] Unhandled exception occured: " + E);
       E.printStackTrace();
@@ -365,40 +401,43 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
 
   @Override
   public int[] USBSID_parsesocketconfig(byte[] socketcfg)
-  { /* TODO: Has no knowledge of pre-defined socket SID id's */
+  {
     assert socketcfg[0] == Cfg.READ_SOCKETCFG.get();
     assert (byte)socketcfg[1] == (byte)0x7F;
-    assert (byte)socketcfg[9] == (byte)0xFF;
+    assert (byte)socketcfg[11] == (byte)0xFF;
 
     int socketone_en = (socketcfg[2] >> 4);
     int socketone_dual = (socketcfg[2] & 0xF);
-    int socketone_chiptype = (socketcfg[3] >> 4);
-    int socketone_clonetype = (socketcfg[3] & 0xF);
+    int socketone_chiptype = socketcfg[3];
     int socketone_sidone = (socketcfg[4] >> 4);
     int socketone_sidtwo = (socketcfg[4] & 0xF);
 
     int sockettwo_en = (socketcfg[5] >> 4);
     int sockettwo_dual = (socketcfg[5] & 0xF);
-    int sockettwo_chiptype = (socketcfg[6] >> 4);
-    int sockettwo_clonetype = (socketcfg[6] & 0xF);
+    int sockettwo_chiptype = socketcfg[6];
     int sockettwo_sidone = (socketcfg[7] >> 4);
     int sockettwo_sidtwo = (socketcfg[7] & 0xF);
 
-    int mirrored = (socketcfg[8] & 0xF);
+    int socketone_s1_id = (socketcfg[8] >> 4);
+    int socketone_s2_id = (socketcfg[8] & 0xF);
+    int sockettwo_s1_id = (socketcfg[9] >> 4);
+    int sockettwo_s2_id = (socketcfg[9] & 0xF);
+
+    int mirrored = (socketcfg[10] & 1);
+    int flipped  = ((socketcfg[10] >> 1) & 1);
+    int mixed    = ((socketcfg[10] >> 2) & 1);
 
     int socketone_numsids = ((socketone_en == 1) ? (socketone_dual == 1) ? 2 : 1 : 0);
     int sockettwo_numsids = ((sockettwo_en == 1) ? (sockettwo_dual == 1) ? 2 : 1 : 0);
     int numsids = (socketone_numsids + sockettwo_numsids);
 
     final int[] parsed = {
-      socketone_en, socketone_dual,
-      socketone_chiptype, socketone_clonetype,
-      socketone_sidone, socketone_sidtwo,
-      sockettwo_en, sockettwo_dual,
-      sockettwo_chiptype, sockettwo_clonetype,
-      sockettwo_sidone, sockettwo_sidtwo,
-      socketone_numsids, sockettwo_numsids,
-      numsids, mirrored,
+      socketone_en, socketone_dual, /* 0, 1 */
+      socketone_chiptype, socketone_sidone, socketone_sidtwo, /* 2, 3, 4 */
+      sockettwo_en, sockettwo_dual, /* 5, 6 */
+      sockettwo_chiptype, sockettwo_sidone, sockettwo_sidtwo, /* 7, 8, 9 */
+      socketone_numsids, sockettwo_numsids, numsids, /* 10, 11, 12 */
+      mirrored, flipped, mixed /* 13, 14, 15 */
     };
     return parsed;
   }
@@ -408,7 +447,7 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
   {
     assert socketcfg[0] == Cfg.READ_SOCKETCFG.get();
     assert (byte)socketcfg[1] == (byte)0x7F;
-    assert (byte)socketcfg[9] == (byte)0xFF;
+    assert (byte)socketcfg[11] == (byte)0xFF;
 
     int socketone_sidone = (socketcfg[4] >> 4);
     int socketone_sidtwo = (socketcfg[4] & 0xF);
@@ -427,17 +466,17 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
 
   @Override
   public int USBSID_sidtypebysidno(int sidno, byte[] socketcfg)
-  { /* TODO: Assumes non re-ordered socket config */
+  {
     final int[] parsedcfg = USBSID_parsesocketconfig(socketcfg);
     int socketone_en = parsedcfg[0];
-    int socketone_sidone = parsedcfg[4];
-    int socketone_sidtwo = parsedcfg[5];
-    int sockettwo_en = parsedcfg[6];
-    int sockettwo_sidone = parsedcfg[10];
-    int sockettwo_sidtwo = parsedcfg[11];
-    int socketone_numsids = parsedcfg[12];
-    int sockettwo_numsids = parsedcfg[13];
-    int numsids = parsedcfg[14];
+    int socketone_sidone = parsedcfg[3];
+    int socketone_sidtwo = parsedcfg[4];
+    int sockettwo_en = parsedcfg[5];
+    int sockettwo_sidone = parsedcfg[8];
+    int sockettwo_sidtwo = parsedcfg[9];
+    int socketone_numsids = parsedcfg[10];
+    int sockettwo_numsids = parsedcfg[11];
+    int numsids = parsedcfg[12];
 
 
     int configs[][] = {
