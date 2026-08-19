@@ -21,5 +21,6 @@ This driver code (or an adapted/ rewritten variant of it) is used in:
 - [SidBerry (fork)](https://github.com/LouDnl/SidBerry)
 - [gt2ultra (fork)](https://github.com/LouDnl/GTUltra-USBSID/tree/master/src/driver)
 - [RetroDebugger (fork)](https://github.com/LouDnl/RetroDebugger/tree/master/platform/Linux/src.Linux/usbsid)
+- [emudore embedded (fork of emudore)](https://github.com/LouDnl/emudore-embedded)
 - goattracker2 (fork)
 - sidfactory2 (fork)
