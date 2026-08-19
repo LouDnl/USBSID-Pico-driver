@@ -7,6 +7,9 @@ For more information about [USBSID-Pico](https://github.com/LouDnl/USBSID-Pico) 
 Usage information is available in [USBSID.h](src/USBSID.h).  
 For native C applications refer to [USBSIDInterface.h](src/USBSIDInterface.h) which is a wrapper around the C++ functions.  
 
+# Java API
+See the interface file for available functions [IUSBSID.java](java/usbsid-usb-driver-library-java/src/main/java/usbsid/IUSBSID.java).  
+
 # Usage
 This driver code (or an adapted/ rewritten variant of it) is used in:
 - [Vice](https://github.com/VICE-Team/svn-mirror/tree/main/vice/src/lib/libusbsiddrv)
