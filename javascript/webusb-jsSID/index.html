@@ -1,0 +1,79 @@
+<!--
+ * USBSID-Pico is a RPi Pico (RP2040/RP2350) based board for interfacing one
+ * or two MOS SID chips and/or hardware SID emulators over (WEB)USB with your
+ * computer, phone or ASID supporting player.
+ *
+ * index.html (Javascript driver)
+ * This file is part of USBSID-Pico-driver (https://github.com/LouDnl/USBSID-Pico-driver)
+ * File author: LouD
+ *
+ * USBSID-Pico-driver
+ * Copyright (C) 2025-2026  LouD
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ *
+ -->
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset='utf-8'>
+  <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+  <title>USBSID-Pico WebUSB example</title>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <!-- <link rel='stylesheet' type='text/css' media='screen' href='main.css'> -->
+  <script src='jsSID-webusb.js'></script>
+  <script src='main.js'></script>
+</head>
+<body>
+
+<div class="container px-4 overflow-hidden" id="sid-file-player">
+  <h2 class="pb-2 border-bottom">SID file player</h2>
+  <div class="row row-cols-1 row-cols-lg-3 align-items-stretch justify-content-center py-5">
+    <!-- Connect card -->
+    <div class="card card-cover px-1 mx-1 h-auto w-auto v-auto overflow-hidden text-bg-auto rounded-4 shadow-lg">
+      <div class="d-flex flex-column h-auto w-auto p-5 text-auto text-shadow-1">
+        <div id="webusb-connect">
+          <button class="btn btn-secondary mt-1" id="device-connect">Connect</button>
+          <span id="status-text"></span><br>
+          <!-- <button class="btn btn-secondary mt-1 d-none" id="toggle-config">Open config</button> -->
+          <!-- <span id="toggle-status-text"></span> -->
+          <div id="devices" style="position:relative; width:100%; height:100%"></div>
+          <button id="load-file" class="btn btn-light browser-ctrls" type="button">
+            <b style="font-size:18px;position:relative;top:-6px;">..</b>
+          </button>
+          <button id="play-pause" class="btn btn-light button-ctrls button-big button-idle disabled" type="button">
+          <svg id="play" height="40" viewBox="0 0 48 48">
+            <path d="M-838-2232H562v3600H-838z" fill="none" />
+            <path d="M16 10v28l22-14z" />
+            <path d="M0 0h48v48H0z" fill="none" />
+          </svg>
+          <!-- <svg id="pause" height="40" viewBox="0 0 48 48" style="display:none;">
+            <path d="M12 38h8V10h-8v28zm16-28v28h8V10h-8z" />
+            <path d="M0 0h48v48H0z" fill="none" />
+          </svg> -->
+        </button>
+        <button id="stop" class="btn btn-light button-ctrls button-big button-selected disabled" type="button">
+          <svg height="40" viewBox="0 0 48 48">
+            <path d="M0 0h48v48H0z" fill="none" />
+            <path d="M12 12h24v24H12z" />
+          </svg>
+        </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
