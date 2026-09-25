@@ -118,6 +118,10 @@ extern "C"
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_UnMute();
   };
+  void setmuted_USBSID(USBSIDitf p, bool muted){
+    if( p == NULL ) return;
+    return ((USBSID_Class*)p)->USBSID_SetMuted(muted);
+  };
   void setclockrate_USBSID(USBSIDitf p, long clockrate_cycles, bool suspend_sids){
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_SetClockRate(clockrate_cycles, suspend_sids);
@@ -253,6 +257,10 @@ extern "C"
     if( p == NULL ) return;
     return ((USBSID_Class*) p)->USBSID_WriteRingCycled(reg, val, cycles);
   };
+  void writeringcycledn_USBSID(USBSIDitf p, const uint8_t *items, int count){
+    if( p == NULL ) return;
+    return ((USBSID_Class*) p)->USBSID_WriteRingCycledN(items, count);
+  };
   void enablethread_USBSID(USBSIDitf p){
     if( p == NULL ) return;
     return ((USBSID_Class*) p)->USBSID_EnableThread();
@@ -277,6 +285,10 @@ extern "C"
     if( p == NULL ) return;
     return ((USBSID_Class*) p)->USBSID_RestartRingBuffer();
   }
+  int ringfree_USBSID(USBSIDitf p){
+    if( p == NULL ) return 0;
+    return ((USBSID_Class*) p)->USBSID_RingFree();
+  };
   void setbuffsize_USBSID(USBSIDitf p, int size){
     if( p == NULL ) return;
     return ((USBSID_Class*) p)->USBSID_SetBufferSize(size);

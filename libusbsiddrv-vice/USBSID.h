@@ -417,6 +417,7 @@ namespace USBSID_NS
       void USBSID_ResetAllRegisters(void);                                     /* Reset register for all SID chips */
       void USBSID_Mute(void);                                                  /* Mute all SID chips */
       void USBSID_UnMute(void);                                                /* UnMute all SID chips */
+      void USBSID_SetMuted(bool muted);                                        /* Mute or unmute and set the firmware's muted state, volume writes stay masked while muted */
       void USBSID_DisableSID(void);                                            /* Release reset pin and unmute SID */
       void USBSID_EnableSID(void);                                             /* Assert reset pin and release chipselect pins */
       void USBSID_ClearBus(void);                                              /* Clear the SID bus from any data */
@@ -455,6 +456,7 @@ namespace USBSID_NS
       /* Asynchronous thread */
       void USBSID_WriteRing(uint8_t reg, uint8_t val);                         /* Write register and value to ringbuffer, USBSID adds 10 delay cycles to each write */
       void USBSID_WriteRingCycled(uint8_t reg, uint8_t val, uint16_t cycles);  /* Write register, value, and cycles to ringbuffer */
+      void USBSID_WriteRingCycledN(const uint8_t *items, int count);           /* Write count x (reg, val, cycles hi, cycles lo) to ringbuffer, one lock and one wakeup */
 
       /* Threading */
       void USBSID_EnableThread(void);                                          /* Enable the thread on the fly */
@@ -467,6 +469,7 @@ namespace USBSID_NS
       void USBSID_SetDiffSize(int size);                                       /* Set the minimum size difference between head & tail */
       void USBSID_ResetRingBuffer(void);                                       /* Resets the ringbuffer to default state */
       void USBSID_RestartRingBuffer(void);                                     /* Restart the ringbuffer */
+      int USBSID_RingFree(void);                                               /* Free bytes in the ringbuffer, unlocked estimate */
 
       /* Thread utils */
       void USBSID_RestartThread(bool with_cycles);                             /* Restart the thread that handles the ringbuffer */

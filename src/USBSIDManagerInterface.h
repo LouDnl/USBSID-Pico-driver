@@ -114,6 +114,11 @@ extern "C" {
   void writering_USBSIDMgr(USBSIDmgr, int logical_sid, uint8_t reg, uint8_t val);
   void writeringcycled_USBSIDMgr(USBSIDmgr, int logical_sid, uint8_t reg, uint8_t val, uint16_t cycles);
   unsigned char read_USBSIDMgr(USBSIDmgr, int logical_sid, uint8_t reg);
+  /* count x (reg, val, cycles hi, cycles lo) in one lock, regs board local */
+  void writeringcycledn_USBSIDMgr(USBSIDmgr, int logical_sid, const uint8_t *items, int count);
+  /* free ringbuffer bytes of the board owning logical_sid, 0 for an unknown SID */
+  int ringfreebytes_USBSIDMgr(USBSIDmgr, int logical_sid);
+  void flushboard_USBSIDMgr(USBSIDmgr, int logical_sid);
 
   /* Broadcast to every open board */
   void flushall_USBSIDMgr(USBSIDmgr);
@@ -121,6 +126,7 @@ extern "C" {
   void resetallregistersall_USBSIDMgr(USBSIDmgr);
   void unmuteall_USBSIDMgr(USBSIDmgr);
   void muteall_USBSIDMgr(USBSIDmgr);
+  void setmutedall_USBSIDMgr(USBSIDmgr, bool muted);  /* sets the firmware muted state */
   void setclockrateall_USBSIDMgr(USBSIDmgr, long clockrate_cycles, bool suspend_sids);
 
 #ifdef __cplusplus

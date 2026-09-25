@@ -122,6 +122,18 @@ extern "C"
     if( m == NULL ) return 0;
     return ((USBSID_Manager*) m)->Read(logical_sid, reg);
   };
+  void writeringcycledn_USBSIDMgr(USBSIDmgr m, int logical_sid, const uint8_t *items, int count){
+    if( m == NULL ) return;
+    return ((USBSID_Manager*) m)->WriteRingCycledN(logical_sid, items, count);
+  };
+  int ringfreebytes_USBSIDMgr(USBSIDmgr m, int logical_sid){
+    if( m == NULL ) return 0;
+    return ((USBSID_Manager*) m)->RingFreeBytes(logical_sid);
+  };
+  void flushboard_USBSIDMgr(USBSIDmgr m, int logical_sid){
+    if( m == NULL ) return;
+    return ((USBSID_Manager*) m)->FlushBoard(logical_sid);
+  };
   void flushall_USBSIDMgr(USBSIDmgr m){
     if( m == NULL ) return;
     return ((USBSID_Manager*) m)->FlushAll();
@@ -141,6 +153,10 @@ extern "C"
   void muteall_USBSIDMgr(USBSIDmgr m){
     if( m == NULL ) return;
     return ((USBSID_Manager*) m)->MuteAll();
+  };
+  void setmutedall_USBSIDMgr(USBSIDmgr m, bool muted){
+    if( m == NULL ) return;
+    return ((USBSID_Manager*) m)->SetMutedAll(muted);
   };
   void setclockrateall_USBSIDMgr(USBSIDmgr m, long clockrate_cycles, bool suspend_sids){
     if( m == NULL ) return;

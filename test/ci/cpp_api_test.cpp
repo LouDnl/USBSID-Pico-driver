@@ -43,6 +43,11 @@ int main(void)
     uint8_t cfg[SOCKET_BUFFER_SIZE] = {0};
     check(us.USBSID_GetSocketConfig(cfg) == nullptr, "socketconfig without connection");
     check(us.USBSID_WaitForCycle(1000) > 0, "waitforcycle");
+    check(us.USBSID_RingFree() == 0, "ringfree without ringbuffer");
+    const uint8_t items[8] = {0x18, 0x0F, 0x00, 0x08, 0x18, 0x00, 0x00, 0x08};
+    us.USBSID_WriteRingCycledN(items, 2);
+    us.USBSID_SetMuted(true);
+    us.USBSID_SetMuted(false);
     check(us.USBSID_Close() == 0, "close unopened");
   }
 
@@ -58,6 +63,12 @@ int main(void)
     mgr.WriteRing(0, 0x18, 0x0F);
     mgr.WriteRingCycled(-1, 0x18, 0x0F, 8);
     check(mgr.Read(0, 0x1B) == 0, "mgr read");
+    const uint8_t items[4] = {0x18, 0x0F, 0x00, 0x08};
+    mgr.WriteRingCycledN(0, items, 1);
+    check(mgr.RingFreeBytes(0) == 0, "mgr ringfree unknown sid");
+    mgr.FlushBoard(-1);
+    mgr.SetMutedAll(true);
+    mgr.SetMutedAll(false);
     mgr.FlushAll();
     mgr.MuteAll();
     mgr.UnMuteAll();

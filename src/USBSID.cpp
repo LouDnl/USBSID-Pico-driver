@@ -211,6 +211,18 @@ void USBSID_Class::USBSID_UnMute(void)
   return;
 }
 
+void USBSID_Class::USBSID_SetMuted(bool muted)
+{ /* Argument 1 in the MUTE/UNMUTE command sets the firmware's muted state, which
+   * masks every later volume register write until unmuted.
+   * USBSID_Mute() sends
+   * 0 and only zeroes the volume once, the next volume write is audible again. */
+  if (!us_PortIsOpen) return;
+  USBDBG(stdout, "[USBSID] SetMuted %d\r\n", muted);
+  unsigned char buff[3] = {(unsigned char)(COMMAND << 6 | (muted ? MUTE : UNMUTE)), 0x1, 0x0};
+  USBSID_SingleWrite(buff, 3);
+  return;
+}
+
 void USBSID_Class::USBSID_DisableSID(void)
 {
   if (!us_PortIsOpen) return;
@@ -974,6 +986,17 @@ void USBSID_Class::USBSID_RestartRingBuffer(void)
   return;
 }
 
+int USBSID_Class::USBSID_RingFree(void)
+{ /* The ringbuffer has no overflow protection, a producer that writes faster
+   * than the thread sends overwrites unsent data. This lets the caller apply
+   * backpressure. Read without the lock, so an estimate. One slot always stays
+   * unused to tell a full ring from an empty one. */
+  if (us_ringbuffer.is_allocated != 1) return 0;
+  const int r = us_ringbuffer.ring_read;
+  const int w = us_ringbuffer.ring_write;
+  return ring_size - 1 - ((w - r + ring_size) % ring_size);
+}
+
 bool USBSID_Class::USBSID_IsHigher()
 {
   return (us_ringbuffer.ring_read < us_ringbuffer.ring_write);
@@ -1091,6 +1114,24 @@ void USBSID_Class::USBSID_WriteRingCycled(uint8_t reg, uint8_t val, uint16_t cyc
     USBSID_RingPut(val);
     USBSID_RingPut((uint8_t)(cycles >> 8) & 0xFF);
     USBSID_RingPut((uint8_t)(cycles & 0xFF));
+    pthread_cond_signal(&us_cond);
+    pthread_mutex_unlock(&us_mutex);
+  } else {
+    USBERR(stderr, "[USBSID] Function '%s' cannot be used when threaded = %d and withcycles = %d\n",
+      __func__, threaded, withcycles);
+  }
+  return;
+}
+
+void USBSID_Class::USBSID_WriteRingCycledN(const uint8_t *items, int count)
+{ /* Batch variant of USBSID_WriteRingCycled(). `items` holds `count` writes of
+   * 4 bytes each: reg, val, cycles hi, cycles lo. The driver thread holds
+   * us_mutex while it sends, so one lock per batch keeps a producer from
+   * queueing behind the thread on every single write. */
+  if (!us_PortIsOpen || items == NULL || count <= 0) return;
+  if (threaded && withcycles) {
+    pthread_mutex_lock(&us_mutex);
+    for (int i = 0; i < count * 4; i++) USBSID_RingPut(items[i]);
     pthread_cond_signal(&us_cond);
     pthread_mutex_unlock(&us_mutex);
   } else {

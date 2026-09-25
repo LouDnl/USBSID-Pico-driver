@@ -158,6 +158,24 @@ unsigned char USBSID_Manager::Read(int logical_sid, uint8_t reg)
   return devices_[logical_map_[logical_sid].board_index]->USBSID_Read(reg);
 }
 
+void USBSID_Manager::WriteRingCycledN(int logical_sid, const uint8_t *items, int count)
+{
+  if (logical_sid < 0 || (size_t)logical_sid >= logical_map_.size()) return;
+  devices_[logical_map_[logical_sid].board_index]->USBSID_WriteRingCycledN(items, count);
+}
+
+int USBSID_Manager::RingFreeBytes(int logical_sid)
+{
+  if (logical_sid < 0 || (size_t)logical_sid >= logical_map_.size()) return 0;
+  return devices_[logical_map_[logical_sid].board_index]->USBSID_RingFree();
+}
+
+void USBSID_Manager::FlushBoard(int logical_sid)
+{
+  if (logical_sid < 0 || (size_t)logical_sid >= logical_map_.size()) return;
+  devices_[logical_map_[logical_sid].board_index]->USBSID_SetFlush();
+}
+
 void USBSID_Manager::FlushAll(void)
 {
   for (auto &dev : devices_) dev->USBSID_SetFlush();
@@ -181,6 +199,11 @@ void USBSID_Manager::UnMuteAll(void)
 void USBSID_Manager::MuteAll(void)
 {
   for (auto &dev : devices_) dev->USBSID_Mute();
+}
+
+void USBSID_Manager::SetMutedAll(bool muted)
+{
+  for (auto &dev : devices_) dev->USBSID_SetMuted(muted);
 }
 
 void USBSID_Manager::SetClockRateAll(long clockrate_cycles, bool suspend_sids)

@@ -36,6 +36,7 @@ int main(void)
   uint8_t cfg[USBSID_SOCKETCONFIG_LEN];
   char serial[USBSID_SERIAL_LEN];
   int found;
+  const uint8_t items[4] = {0x18, 0x0F, 0x00, 0x08};
 
   /* NULL handle */
   check(init_USBSID(NULL, false, false) == -1, "init NULL");
@@ -48,6 +49,9 @@ int main(void)
   check(!getsocketconfig_USBSID(NULL, cfg), "socketconfig NULL");
   check(waitforcycle_USBSID(NULL, 10) == 0, "waitforcycle NULL");
   resetringbuffer_USBSID(NULL);
+  check(ringfree_USBSID(NULL) == 0, "ringfree NULL");
+  writeringcycledn_USBSID(NULL, items, 1);
+  setmuted_USBSID(NULL, true);
   close_USBSID(NULL);
 
   /* Unopened handle */
@@ -68,6 +72,11 @@ int main(void)
   check(!getsocketconfig_USBSID(us, cfg), "socketconfig without connection");
   check(getsocketnumsids_USBSID(us, 1, NULL) == 0, "socketnumsids NULL cfg");
   check(waitforcycle_USBSID(us, 1000) > 0, "waitforcycle");
+  check(ringfree_USBSID(us) == 0, "ringfree without ringbuffer");
+  writeringcycledn_USBSID(us, items, 1);
+  writeringcycledn_USBSID(us, NULL, 1);
+  setmuted_USBSID(us, true);
+  setmuted_USBSID(us, false);
   close_USBSID(us);
 
   /* Enumeration opens nothing for I/O, zero boards on CI */
@@ -80,6 +89,10 @@ int main(void)
   check(!openall_USBSIDMgr(NULL, NULL, 0, false, false), "openall NULL");
   check(totalsids_USBSIDMgr(NULL) == 0, "totalsids NULL");
   close_USBSIDMgr(NULL);
+  check(ringfreebytes_USBSIDMgr(NULL, 0) == 0, "ringfreebytes NULL");
+  writeringcycledn_USBSIDMgr(NULL, 0, items, 1);
+  flushboard_USBSIDMgr(NULL, 0);
+  setmutedall_USBSIDMgr(NULL, true);
   mgr = create_USBSIDMgr();
   check(mgr != NULL, "mgr create");
   check(!openall_USBSIDMgr(mgr, NULL, 1, false, false), "openall NULL serials");
@@ -90,6 +103,11 @@ int main(void)
   writering_USBSIDMgr(mgr, 0, 0x18, 0x0F);
   writeringcycled_USBSIDMgr(mgr, -1, 0x18, 0x0F, 8);
   check(read_USBSIDMgr(mgr, 0, 0x1B) == 0, "mgr read");
+  writeringcycledn_USBSIDMgr(mgr, 0, items, 1);
+  check(ringfreebytes_USBSIDMgr(mgr, 0) == 0, "mgr ringfreebytes unknown sid");
+  flushboard_USBSIDMgr(mgr, -1);
+  setmutedall_USBSIDMgr(mgr, true);
+  setmutedall_USBSIDMgr(mgr, false);
   flushall_USBSIDMgr(mgr);
   muteall_USBSIDMgr(mgr);
   unmuteall_USBSIDMgr(mgr);

@@ -69,6 +69,7 @@ extern "C" {
   void clearbus_USBSID(USBSIDitf);
   void mute_USBSID(USBSIDitf);
   void unmute_USBSID(USBSIDitf);
+  void setmuted_USBSID(USBSIDitf, bool muted);  /* sets the firmware muted state, volume writes stay masked while muted */
   void setclockrate_USBSID(USBSIDitf, long clockrate_cycles, bool suspend_sids);
   long getclockrate_USBSID(USBSIDitf);
   long getrefreshrate_USBSID(USBSIDitf);
@@ -139,6 +140,7 @@ extern "C" {
   /* Asynchronous thread */
   void writering_USBSID(USBSIDitf, uint8_t reg, uint8_t val);
   void writeringcycled_USBSID(USBSIDitf, uint8_t reg, uint8_t val, uint16_t cycles);
+  void writeringcycledn_USBSID(USBSIDitf, const uint8_t *items, int count);  /* count x (reg, val, cycles hi, cycles lo) */
 
   /* Thread buffer */
   void enablethread_USBSID(USBSIDitf);
@@ -147,6 +149,7 @@ extern "C" {
   void flush_USBSID(USBSIDitf);
   void resetringbuffer_USBSID(USBSIDitf);
   void restartringbuffer_USBSID(USBSIDitf);
+  int ringfree_USBSID(USBSIDitf);  /* free ringbuffer bytes, 4 per cycled write */
   void setbuffsize_USBSID(USBSIDitf, int size);
   void setdiffsize_USBSID(USBSIDitf, int size);
 

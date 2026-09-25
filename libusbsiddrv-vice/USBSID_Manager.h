@@ -121,12 +121,25 @@ class USBSID_Manager {
     void WriteRingCycled(int logical_sid, uint8_t reg, uint8_t val, uint16_t cycles);
     unsigned char Read(int logical_sid, uint8_t reg);
 
+    /* `count` x (reg, val, cycles hi, cycles lo) to the board owning
+     * `logical_sid` in one lock, regs already board local */
+    void WriteRingCycledN(int logical_sid, const uint8_t *items, int count);
+
+    /* Free bytes in the ringbuffer of the board owning `logical_sid`, 0 for
+     * an unknown SID. Each cycled write takes 4 bytes, there is no overflow
+     * protection. A producer checks this before writing */
+    int RingFreeBytes(int logical_sid);
+
+    /* Flush only the board owning `logical_sid` */
+    void FlushBoard(int logical_sid);
+
     /* Broadcast to every open board, in board open order */
     void FlushAll(void);
     void ResetRingBufferAll(void);
     void ResetAllRegistersAll(void);
     void UnMuteAll(void);
     void MuteAll(void);
+    void SetMutedAll(bool muted);  /* Sets the firmware muted state, see USBSID_SetMuted() */
     void SetClockRateAll(long clockrate_cycles, bool suspend_sids);
 
   private:
