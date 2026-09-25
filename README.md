@@ -6,7 +6,7 @@ For more information about [USBSID-Pico](https://github.com/LouDnl/USBSID-Pico) 
 # C/C++ API
 Usage information is available in [USBSID.h](src/USBSID.h).  
 For native C applications refer to [USBSIDInterface.h](src/USBSIDInterface.h) which is a wrapper around the C++ functions.  
-For using multiple boards at once refer to [USBSID_Manager.h](src/USBSID_Manager.h), which opens every attached board and addresses all their SIDs as one continuous range of SID numbers.  
+For using multiple boards at once refer to [USBSID_Manager.h](src/USBSID_Manager.h), which opens every attached board and addresses all their SIDs as one continuous range of SID numbers. Each board's SIDs follow that board's own configuration (its SID numbering, flipped/mixed socket presets included). Remapping them is up to the player/emulator settings or command line.  
 For native C applications refer to [USBSIDManagerInterface.h](src/USBSIDManagerInterface.h) which is a wrapper around the multiboard C++ functions.  
 
 # Java API
