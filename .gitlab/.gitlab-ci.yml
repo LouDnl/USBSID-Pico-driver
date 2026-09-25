@@ -1,0 +1,399 @@
+# USBSID-Pico-driver GitLab CI/CD configuration
+#
+# Mirrors the GitHub Actions workflows in .github/workflows/:
+#   build-native.yml   -> native:*          C/C++ build and test compile
+#   build-java.yml     -> java:build        Java JAR on JDK 17, 21 and 25
+#   release-native.yml -> *:native          v<version> tags, source archives
+#   release-java.yml   -> *:java            java-v<version> tags, JAR and POM
+#
+# Builds and tests run through test/ci/build.sh, release files are staged by
+# test/ci/package.sh, both shared with GitHub.
+#
+# This file is not at the repository root: set the project's CI/CD
+# configuration file (Settings > CI/CD > General pipelines) to
+# .gitlab/.gitlab-ci.yml.
+#
+# Supports two GitLab instances:
+#   - gitlab.loudai.nl (private): Linux, Windows and macOS 15 Intel runners
+#   - gitlab.com (public): Linux, macOS (Apple Silicon) and Windows runners
+
+variables:
+  # Instance with the Intel macOS runner (no Apple Silicon runner there)
+  PRIVATE_HOST: "gitlab.loudai.nl"
+  # Pipelines on any instance other than PRIVATE_HOST (gitlab.com) are off.
+  # Set this to "true" here, or as a CI/CD variable in the gitlab.com
+  # project, to run them.
+  PUBLIC_PIPELINES_ENABLED: "false"
+  # Windows runner tag. The default is the gitlab.com SaaS runner, set this in
+  # the project CI/CD variables on an instance with its own Windows runner.
+  WINDOWS_RUNNER_TAG: "saas-windows-medium-amd64"
+  # Linux runner tag, the default for every job without its own tags. Keeps
+  # untagged jobs off the macOS shell runner. gitlab.com SaaS runners do not
+  # carry "linux", set this to "saas-linux-small-amd64" there.
+  LINUX_RUNNER_TAG: "linux"
+  LINUX_IMAGE: "ubuntu:24.04"
+  # C++11 is the minimum, VICE configure falls back to it
+  LINUX_CXXSTDS: "c++11 c++14 c++17 c++20"
+  JAVA_RELEASE_JDK: "17"
+  DEBIAN_FRONTEND: noninteractive
+
+workflow:
+  rules:
+    # Nothing runs outside PRIVATE_HOST unless PUBLIC_PIPELINES_ENABLED is "true"
+    - if: $CI_SERVER_HOST != $PRIVATE_HOST && $PUBLIC_PIPELINES_ENABLED != "true"
+      when: never
+    - if: $CI_COMMIT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - src/**/*
+        - libusbsiddrv-vice/**/*
+        - test/ci/**/*
+        - java/**/*
+        - .gitlab/.gitlab-ci.yml
+      variables:
+        PIPELINE_TYPE: "dev"
+    - if: $CI_COMMIT_TAG =~ /^v[0-9].*$/
+      variables:
+        PIPELINE_TYPE: "release-native"
+    - if: $CI_COMMIT_TAG =~ /^java-v[0-9].*$/
+      variables:
+        PIPELINE_TYPE: "release-java"
+    - if: $CI_PIPELINE_SOURCE == "web" || $FORCE_RUN == "true"
+      variables:
+        PIPELINE_TYPE: "manual"
+
+stages:
+  - build
+  - package
+  - release
+
+default:
+  interruptible: true
+  # Jobs with their own tags (Windows, macOS) replace this
+  tags:
+    - $LINUX_RUNNER_TAG
+
+# ============================================================================
+# RULE SETS
+# ============================================================================
+
+.rules_native:
+  rules:
+    - if: $PIPELINE_TYPE == "manual" || $PIPELINE_TYPE == "release-native"
+    - if: $PIPELINE_TYPE == "dev"
+      changes:
+        - src/**/*
+        - libusbsiddrv-vice/**/*
+        - test/ci/**/*
+        - .gitlab/.gitlab-ci.yml
+
+# Apple Silicon macOS runners only exist on gitlab.com
+.rules_native_macos:
+  rules:
+    - if: $CI_SERVER_HOST == $PRIVATE_HOST
+      when: never
+    - !reference [.rules_native, rules]
+
+# macOS 15 Intel runner only exists on the private instance
+.rules_native_macos15intel:
+  rules:
+    - if: $CI_SERVER_HOST != $PRIVATE_HOST
+      when: never
+    - !reference [.rules_native, rules]
+
+.rules_java:
+  rules:
+    - if: $PIPELINE_TYPE == "manual" || $PIPELINE_TYPE == "release-java"
+    - if: $PIPELINE_TYPE == "dev"
+      changes:
+        - java/**/*
+        - test/ci/package.sh
+        - .gitlab/.gitlab-ci.yml
+
+.rules_release_native:
+  rules:
+    - if: $PIPELINE_TYPE == "release-native"
+
+.rules_release_java:
+  rules:
+    - if: $PIPELINE_TYPE == "release-java"
+
+# ============================================================================
+# C/C++ DRIVER (build-native.yml)
+# TARGET src:  driver-repo/src, C++ library + C interface + manager
+# TARGET vice: driver-repo/libusbsiddrv-vice, the copy used by VICE
+# ============================================================================
+
+native:linux:
+  extends: .rules_native
+  stage: build
+  image: ${LINUX_IMAGE}
+  parallel:
+    matrix:
+      - TARGET: [src, vice]
+        TOOLCHAIN: [gcc, clang]
+  before_script:
+    - apt-get update
+    - apt-get install -y build-essential clang pkg-config libusb-1.0-0-dev
+  script:
+    - |
+      if [ "$TOOLCHAIN" = "clang" ]; then
+        export CC=clang CXX=clang++
+      else
+        export CC=gcc CXX=g++
+      fi
+      CXXSTDS="$LINUX_CXXSTDS" bash test/ci/build.sh "$TARGET"
+
+.native_macos_script:
+  stage: build
+  parallel:
+    matrix:
+      - TARGET: [src, vice]
+  variables:
+    HOMEBREW_NO_AUTO_UPDATE: "1"
+  before_script:
+    - brew install libusb pkgconf
+  script:
+    - CC=clang CXX=clang++ CXXSTDS="c++17" bash test/ci/build.sh "$TARGET"
+
+native:macos:
+  extends:
+    - .native_macos_script
+    - .rules_native_macos
+  tags:
+    - saas-macos-medium-m1
+  image: macos-14-xcode-15
+
+# Private instance's own macOS 15 Intel runner, shell executor, no image
+native:macos15-intel:
+  extends:
+    - .native_macos_script
+    - .rules_native_macos15intel
+  tags:
+    - macos-15-intel
+
+# MSYS2 through choco, like the player. The runner shell is PowerShell, so
+# the bash part is written to a file and run through the msys2 login shell.
+# CHERE_INVOKING keeps that shell in the project directory, MSYSTEM (a matrix
+# variable) selects the MINGW64 or CLANG64 environment.
+native:windows:
+  extends: .rules_native
+  stage: build
+  tags:
+    - $WINDOWS_RUNNER_TAG
+  parallel:
+    matrix:
+      - TARGET: [src, vice]
+        MSYSTEM: MINGW64
+        PKG_PREFIX: mingw-w64-x86_64
+        CC: gcc
+        CXX: g++
+      - TARGET: [src, vice]
+        MSYSTEM: CLANG64
+        PKG_PREFIX: mingw-w64-clang-x86_64
+        CC: clang
+        CXX: clang++
+  before_script:
+    - choco install msys2 -y --no-progress
+    - C:\tools\msys64\usr\bin\bash -lc "pacman -Syu --noconfirm"
+    - C:\tools\msys64\usr\bin\bash -lc "pacman -S --noconfirm --needed ${env:PKG_PREFIX}-toolchain ${env:PKG_PREFIX}-libusb ${env:PKG_PREFIX}-pkgconf"
+  script:
+    - |
+      $script = @'
+      set -eu
+      CXXSTDS="c++17" bash test/ci/build.sh "$TARGET"
+      '@
+      [IO.File]::WriteAllText("$PWD/ci-step.sh", ($script -replace "`r`n", "`n"))
+      $env:CHERE_INVOKING = "1"
+      C:\tools\msys64\usr\bin\bash -lc "./ci-step.sh"
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+# ============================================================================
+# JAVA DRIVER (build-java.yml)
+# Tests are compiled but not run: ConnectTest needs a USBSID-Pico attached.
+# ============================================================================
+
+.java_maven:
+  variables:
+    MAVEN_OPTS: "-Dmaven.repo.local=${CI_PROJECT_DIR}/.m2/repository"
+  cache:
+    key: java-maven
+    paths:
+      - .m2/repository
+
+java:build:
+  extends:
+    - .java_maven
+    - .rules_java
+  stage: build
+  image: maven:3.9-eclipse-temurin-${JDK}
+  parallel:
+    matrix:
+      - JDK: ["17", "21", "25"]
+  script:
+    - cd java/usbsid-usb-driver-library-java
+    - mvn -B -ntp -DskipTests package
+    - ls -l target/*.jar dependency-reduced-pom.xml
+
+# ============================================================================
+# RELEASE FILES
+# The package jobs hand their job id and the version to the create jobs
+# through a dotenv report, for direct links to each release file.
+# ============================================================================
+
+# Source archives, after every C/C++ build passed. Apple Silicon macOS only
+# exists on gitlab.com, Intel macOS only on the private instance.
+package:native:
+  extends: .rules_release_native
+  stage: package
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache bash tar zip coreutils
+  script:
+    - DRIVER_VERSION="${CI_COMMIT_TAG#v}"
+    - bash test/ci/package.sh native "$DRIVER_VERSION" release
+    - echo "DRIVER_VERSION=${DRIVER_VERSION}" > release.env
+    - echo "PACKAGE_JOB_ID=${CI_JOB_ID}" >> release.env
+  artifacts:
+    name: "USBSID-Pico-driver-${CI_COMMIT_TAG}"
+    paths:
+      - release/
+    reports:
+      dotenv: release.env
+    expire_in: never
+  needs:
+    - job: native:linux
+    - job: native:macos
+      optional: true
+    - job: native:macos15-intel
+      optional: true
+    - job: native:windows
+
+# JAR and POM from the JDK the POM targets, after every JDK build passed
+package:java:
+  extends:
+    - .java_maven
+    - .rules_release_java
+  stage: package
+  image: maven:3.9-eclipse-temurin-${JAVA_RELEASE_JDK}
+  script:
+    - DRIVER_VERSION="${CI_COMMIT_TAG#java-v}"
+    - (cd java/usbsid-usb-driver-library-java && mvn -B -ntp -DskipTests package)
+    - bash test/ci/package.sh java "$DRIVER_VERSION" release
+    - echo "DRIVER_VERSION=${DRIVER_VERSION}" > release.env
+    - echo "PACKAGE_JOB_ID=${CI_JOB_ID}" >> release.env
+  artifacts:
+    name: "usbsid-usb-driver-library-java-${CI_COMMIT_TAG}"
+    paths:
+      - release/
+    reports:
+      dotenv: release.env
+    expire_in: never
+  needs:
+    - job: java:build
+
+# Commits since the previous tag of the same kind, limited to NOTES_PATHS
+.release_notes:
+  stage: package
+  image: alpine:latest
+  variables:
+    GIT_DEPTH: "0"
+  before_script:
+    - apk add --no-cache git
+    - git config --global --add safe.directory "${CI_PROJECT_DIR}"
+    - git fetch --tags --quiet || true
+  script:
+    - |
+      PREV=$(git tag --list "$NOTES_TAG_GLOB" --sort=-version:refname | grep -vx "$CI_COMMIT_TAG" | head -n 1 || true)
+      {
+        printf '%s\n\n' "$NOTES_HEADER"
+        echo "**Commits in this release:**"
+        if [ -n "$PREV" ]; then
+          git log "${PREV}..${CI_COMMIT_TAG}" --oneline -- $NOTES_PATHS
+        else
+          git log "$CI_COMMIT_TAG" --oneline -- $NOTES_PATHS
+        fi
+      } > release_notes.md
+      cat release_notes.md
+  artifacts:
+    paths:
+      - release_notes.md
+    expire_in: 4 weeks
+  needs: []
+
+release:notes:native:
+  extends:
+    - .release_notes
+    - .rules_release_native
+  variables:
+    NOTES_TAG_GLOB: "v[0-9]*"
+    NOTES_PATHS: "src libusbsiddrv-vice"
+    NOTES_HEADER: "C/C++ driver source for USBSID-Pico: src/ (C++ driver, C interface, multiboard manager) and libusbsiddrv-vice/ (the copy used by VICE)."
+
+release:notes:java:
+  extends:
+    - .release_notes
+    - .rules_release_java
+  variables:
+    NOTES_TAG_GLOB: "java-v[0-9]*"
+    NOTES_PATHS: "java"
+    NOTES_HEADER: "Java driver library for USBSID-Pico, built with JDK 17 (Java 17 bytecode). The POM is the dependency reduced POM, for a local Maven install."
+
+create:release:native:
+  extends: .rules_release_native
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  script:
+    - echo "Creating C/C++ driver release ${CI_COMMIT_TAG} (${DRIVER_VERSION})"
+  release:
+    tag_name: ${CI_COMMIT_TAG}
+    name: "C/C++ driver ${CI_COMMIT_TAG}"
+    description: release_notes.md
+    assets:
+      links:
+        - name: "USBSID-Pico-driver-src-${DRIVER_VERSION}.tar.gz"
+          url: "${CI_PROJECT_URL}/-/jobs/${PACKAGE_JOB_ID}/artifacts/raw/release/USBSID-Pico-driver-src-${DRIVER_VERSION}.tar.gz"
+          link_type: "package"
+        - name: "USBSID-Pico-driver-src-${DRIVER_VERSION}.zip"
+          url: "${CI_PROJECT_URL}/-/jobs/${PACKAGE_JOB_ID}/artifacts/raw/release/USBSID-Pico-driver-src-${DRIVER_VERSION}.zip"
+          link_type: "package"
+        - name: "USBSID-Pico-driver-vice-${DRIVER_VERSION}.tar.gz"
+          url: "${CI_PROJECT_URL}/-/jobs/${PACKAGE_JOB_ID}/artifacts/raw/release/USBSID-Pico-driver-vice-${DRIVER_VERSION}.tar.gz"
+          link_type: "package"
+        - name: "USBSID-Pico-driver-vice-${DRIVER_VERSION}.zip"
+          url: "${CI_PROJECT_URL}/-/jobs/${PACKAGE_JOB_ID}/artifacts/raw/release/USBSID-Pico-driver-vice-${DRIVER_VERSION}.zip"
+          link_type: "package"
+        - name: "SHA256SUMS"
+          url: "${CI_PROJECT_URL}/-/jobs/${PACKAGE_JOB_ID}/artifacts/raw/release/SHA256SUMS"
+          link_type: "other"
+  needs:
+    - job: package:native
+      artifacts: true
+    - job: release:notes:native
+      artifacts: true
+
+create:release:java:
+  extends: .rules_release_java
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  script:
+    - echo "Creating Java driver release ${CI_COMMIT_TAG} (${DRIVER_VERSION})"
+  release:
+    tag_name: ${CI_COMMIT_TAG}
+    name: "Java driver ${CI_COMMIT_TAG}"
+    description: release_notes.md
+    assets:
+      links:
+        - name: "usbsid-usb-driver-library-java-${DRIVER_VERSION}.jar"
+          url: "${CI_PROJECT_URL}/-/jobs/${PACKAGE_JOB_ID}/artifacts/raw/release/usbsid-usb-driver-library-java-${DRIVER_VERSION}.jar"
+          link_type: "package"
+        - name: "usbsid-usb-driver-library-java-${DRIVER_VERSION}.pom"
+          url: "${CI_PROJECT_URL}/-/jobs/${PACKAGE_JOB_ID}/artifacts/raw/release/usbsid-usb-driver-library-java-${DRIVER_VERSION}.pom"
+          link_type: "package"
+        - name: "SHA256SUMS"
+          url: "${CI_PROJECT_URL}/-/jobs/${PACKAGE_JOB_ID}/artifacts/raw/release/SHA256SUMS"
+          link_type: "other"
+  needs:
+    - job: package:java
+      artifacts: true
+    - job: release:notes:java
+      artifacts: true
