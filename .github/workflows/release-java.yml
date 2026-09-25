@@ -8,7 +8,7 @@ name: Java driver release
 on:
   push:
     tags:
-      - 'java-v[0-9]*'
+      - 'java-v[0-9\.]*'
 
 permissions:
   contents: read
