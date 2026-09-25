@@ -4,19 +4,21 @@
  * computer, phone or ASID supporting player.
  *
  * USBSID.h
- * This file is part of USBSID-Pico (https://github.com/LouDnl/USBSID-Pico-driver)
+ * This file is part of USBSID-Pico-driver (https://github.com/LouDnl/USBSID-Pico-driver)
  * File author: LouD
  *
- * Copyright (c) 2024-2026 LouD
+ * USBSID-Pico-driver
+ * Copyright (C) 2024-2026  LouD
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 2.
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
@@ -69,52 +71,30 @@
   #define LIBUSB_CALL
 #endif
 
+/* Macro wrapper around sizeof */
+#ifndef count_of
+#define count_of(a) (sizeof(a)/sizeof(uint8_t))
+#endif
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
 
-#ifdef __cplusplus
-  #include <cstdint>
-  #include <cstdio>
-  #include <cstdlib>
-  #include <cstring>
-  #include <chrono>
-  #include <thread>
-  #include <atomic>
-#else
-  #include <stdbool.h>
-  #include <stdint.h>
-  #include <stdio.h>
-  #include <stdlib.h>
-  #include <string.h>
-  #include <pthread.h>
-  #include <stdatomic.h>
-#endif
-
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <chrono>
+#include <thread>
+#include <atomic>
+#include <string>
+#include <vector>
+#include <pthread.h> /* Required, see below */
 /**
- * @brief Fix for CLANG64 and CLANGARM64 builds
+ * @brief More info on the pthread.h fix for CLANG64 and CLANGARM64 builds
  * @ref https://github.com/LouDnl/USBSID-Pico-driver/issues/11
  * @ref https://github.com/msys2/MINGW-packages/actions/runs/21104083635
  */
-#if defined(__clang__) && defined(__MINGW32__)
-  #if defined(__x86_64__) || defined(__aarch64__)
-    #include <pthread.h>
-  #endif
-#endif
 
-
-/* Optional driver start and driver exit commands
- *
- * Some players do weird things on start, choose
- * any of these to suit your own needs
- *
- */
-
-// #define US_RESET_ON_ENTRY     /* Send Reset SID command on LIBUSB Entry */
-// #define US_CLEARBUS_ON_ENTRY  /* Send Clear Bus command on LIBUSB Entry */
-// #define US_UNMUTE_ON_ENTRY    /* Send UnMute SID command on LIBUSB Exit */
-
-// #define US_MUTE_ON_EXIT       /* Send Mute SID command on LIBUSB Exit */
-// #define US_RESET_ON_EXIT      /* Send Reset SID command on LIBUSB Exit */
 
 
 /* Uncomment for debug logging */
@@ -126,35 +106,32 @@
 #endif
 #define USBERR(...) fprintf(__VA_ARGS__)
 
-using namespace std;
 
 /* Pre-define libusb structs */
 struct libusb_context;
 struct libusb_transfer;
+struct libusb_device_handle;
 
 namespace USBSID_NS
 {
-  /* pre-declaration for static functions */
   class USBSID_Class;
 
   /* LIBUSB/USBSID related */
+
   enum {
     VENDOR_ID      = 0xCAFE,
     PRODUCT_ID     = 0x4011,
     ACM_CTRL_DTR   = 0x01,
     ACM_CTRL_RTS   = 0x02,
-#ifdef USE_VENDOR_ITF
-    EP_OUT_ADDR    = 0x04,
-    EP_IN_ADDR     = 0x84,
-#else
+#ifndef USE_VENDOR_ITF /* By default the driver uses the CDC port */
     EP_OUT_ADDR    = 0x02,
     EP_IN_ADDR     = 0x82,
+#else
+    EP_OUT_ADDR    = 0x04,
+    EP_IN_ADDR     = 0x84,
 #endif
     LEN_IN_BUFFER  = 1,
     LEN_OUT_BUFFER = 64,
-    #ifdef DEBUG_USBSID_MEMORY
-    LEN_TMP_BUFFER = 4
-    #endif
   };
 
   enum {
@@ -202,56 +179,23 @@ namespace USBSID_NS
    */
   #define SOCKET_BUFFER_SIZE 12
 
-  /* Thread related */
-  static int run_thread;
-
-  /* Fake C64 Memory */
-  #ifdef DEBUG_USBSID_MEMORY
-  static uint8_t sid_memory[0x20];
-  static uint8_t sid_memory_changed[0x20];
-  static uint16_t sid_memory_cycles[0x20];
-  #endif
-
-  /* LIBUSB related */
-  static struct libusb_device_handle *devh = NULL;
-  static struct libusb_transfer *transfer_out = NULL;  /* OUT-going transfers (OUT from host PC to USB-device) */
-  static struct libusb_transfer *transfer_in = NULL;  /* IN-coming transfers (IN to host PC from USB-device) */
-  static bool transfer_out_pending = false;   /* for better transfer sync */
-  static bool transfer_in_pending = false;
-
-  static libusb_context *ctx = NULL;
-  static bool in_buffer_dma = false;
-  static bool out_buffer_dma = false;
-
-  static bool threaded = false;
-  static bool withcycles = false;
-  static int rc, read_completed, write_completed;
-
-  /* USB buffer related */
-  static uint8_t * __restrict__ in_buffer;     /* incoming libusb will reside in this buffer */
-  static uint8_t * __restrict__ out_buffer;    /* outgoing libusb will reside in this buffer */
-  static uint8_t * __restrict__ thread_buffer; /* data to be transfered to the out_buffer will reside in this buffer */
-  static uint8_t * __restrict__ write_buffer;  /* non async data will be written from this buffer */
-  #ifdef DEBUG_USBSID_MEMORY
-  static uint8_t * __restrict__ temp_buffer;   /* temp buffer for debug printing */
-  #endif
-  static uint8_t * __restrict__ result;        /* variable where read data is copied into */
-  static int len_out_buffer;      /* changable variable for out buffer size */
-  static int buffer_pos = 1;      /* current position of the out buffer */
-  static int flush_buffer = 0;    /* flush buffer yes or no */
 
   /* Ringbuffer related */
+
   typedef struct {
     int ring_read;
     int ring_write;
     int is_allocated;
     uint8_t * __restrict__ ringbuffer;
   } ring_buffer_t;
-  static ring_buffer_t us_ringbuffer;
-  const int min_diff_size = 16;
-  const int min_ring_size = 256;
-  const int default_diff_size = 64;
-  const int default_ring_size = 8192;
+
+  static const int min_diff_size = 16;
+  static const int min_ring_size = 256;
+  static const int default_diff_size = 64;
+  static const int default_ring_size = 8192;
+
+
+  /* Clockspeed related */
 
   /* Clock cycles per second
    * Clock speed: 0.985 MHz (PAL) or 1.023 MHz (NTSC)
@@ -276,6 +220,7 @@ namespace USBSID_NS
     DREAN   = 1023440,  /* 1.023 MHz = 0.977097 us */
     NTSC2   = 1022730,  /* 1.023 MHz = 0.977778 us */
   };
+
   /* Refreshrates (cycles) in microseconds */
   enum refresh_rates
   {
@@ -283,6 +228,7 @@ namespace USBSID_NS
     HZ_EU      = 19950,  /* 50Hz ~ 20000 == 20 us    / 50.125Hz ~ 19.950124688279 exact */
     HZ_US      = 16715,  /* 60Hz ~ 16667 == 16.67 us / 59.826Hz ~ 16.715140574332 exact */
   };
+
   /* Rasterrates (cycles) in microseconds
    * Source: https://www.c64-wiki.com/wiki/raster_time
    *
@@ -310,54 +256,106 @@ namespace USBSID_NS
   static const enum clock_speeds clockSpeed[]   = { DEFAULT, PAL, NTSC, DREAN, NTSC2 };
   static const enum refresh_rates refreshRate[] = { HZ_DEFAULT, HZ_EU, HZ_US, HZ_US, HZ_US };
   static const enum raster_rates rasterRate[]   = { R_DEFAULT, R_EU, R_US, R_US, R_US };
-  static long cycles_per_sec    = DEFAULT;     /* default @ 1000000 */
-  static long cycles_per_frame  = HZ_DEFAULT;  /* default @ 20000 */
-  static long cycles_per_raster = R_DEFAULT;   /* default @ 20000 */
-  static int clk_retrieved = 0;
-  static long us_clkrate = 0;
-  static int numsids = 0;
-  static int fmoplsid = -1;
-  static int pcbversion = -1;
-  static int socketconfig = -1;
 
-  /* Object related */
-  static int us_Found = 0;
-  static int instance = -1;
 
   /* Timing related */
   typedef std::nano                               ratio_t;      /* 1000000000 */
   typedef std::chrono::steady_clock::time_point   timestamp_t;  /* Point in time */
   typedef std::chrono::nanoseconds                duration_t;   /* Duration in nanoseconds */
 
-  #ifdef __cplusplus
-  static std::atomic_int us_thread(0);
-  #else
-  static _Atomic int us_thread = 0;
-  #endif
-  static pthread_mutex_t us_mutex;
+
+  /* USBSID instance related */
+
+  /* Shared instance id counter for diagnostics only. Does not guard any connections
+   * or connection behaviours */
+  static std::atomic_int instance_counter{-1};
+
+  /* Enumartion struct to hold information about detected physical boards */
+  struct USBSID_DeviceInfo {
+    std::string serial;
+    uint8_t bus = 0;
+    std::vector<uint8_t> port_path;  /* libusb_get_port_numbers(), stable tie-breaker */
+  };
+
+
+  /* Le class */
+
   class USBSID_Class {
     private:
 
       /* Driver related */
-      static bool us_Initialised;
-      static bool us_Available;
-      static bool us_PortIsOpen;
-      int us_InstanceID;
+      int us_InstanceID;                             /* got tattoo? */
+      bool us_Initialised = false;                   /* done yet? */
+      bool us_Available = false;                     /* are you there? */
+      bool us_PortIsOpen = false;                    /* open wide! */
+
+      /* Which physical board to open.
+       * For single-board like behaviour, open the first VID/PID match */
+      std::string want_serial;                       /* The one we want */
+      std::string opened_serial;                     /* The one we get */
+      int want_index = 0;                            /* The index we want */
 
       /* Timing related */
-      static double us_CPUcycleDuration;  /* CPU cycle duration in nanoseconds */
-      static double us_InvCPUcycleDurationNanoSeconds;  /* Inverted CPU cycle duration in nanoseconds */
-      static timestamp_t m_StartTime;  /* That moment when... */
-      static timestamp_t m_LastTime;  /* I know what you did last summer! */
+      double us_CPUcycleDuration;                    /* CPU cycle duration in nanoseconds */
+      double us_InvCPUcycleDurationNanoSeconds;      /* Inverted CPU cycle duration in nanoseconds */
+      timestamp_t m_StartTime;                       /* That moment when... */
+      timestamp_t m_LastTime;                        /* I know what you did last summer! */
 
       /* Ringbuffer related */
-      static int diff_size;
-      static int ring_size;
+      int diff_size = default_diff_size;             /* must init with something to work */
+      int ring_size = default_ring_size;             /* must init with something to work */
+
+      /* LIBUSB related */
+      libusb_context *ctx = NULL;
+      struct libusb_device_handle *devh = NULL;
+      struct libusb_transfer *transfer_out = NULL;   /* OUT-going transfers (OUT from host PC to USB-device) */
+      struct libusb_transfer *transfer_in = NULL;    /* IN-coming transfers (IN to host PC from USB-device) */
+      bool transfer_out_pending = false;             /* for better transfer out sync */
+      bool transfer_in_pending = false;              /* for better transfer in sync */
+      bool in_buffer_dma = false;                    /* is the in buffer DMA or not */
+      bool out_buffer_dma = false;                   /* is the out buffer DMA or not */
+
+      bool threaded = false;                         /* are we threading the needle? */
+      bool withcycles = false;                       /* with or without bicycles */
+      int rc = -1;                                   /* to rc or not to rc, that is the question */
+      int read_completed = 0;                        /* still not done? */
+      int write_completed = 0;                       /* still not done? */
+
+      /* USB buffer related */
+      uint8_t * __restrict__ in_buffer = NULL;       /* incoming libusb will reside in this buffer */
+      uint8_t * __restrict__ out_buffer = NULL;      /* outgoing libusb will reside in this buffer */
+      uint8_t * __restrict__ thread_buffer = NULL;   /* data to be transfered to the out_buffer will reside in this buffer */
+      uint8_t * __restrict__ write_buffer = NULL;    /* non async data will be written from this buffer */
+      uint8_t * __restrict__ result = NULL;          /* variable where read data is copied into */
+      int len_out_buffer = 0;                        /* changable variable for out buffer size */
+      int buffer_pos = 1;                            /* current position of the out buffer */
+      int flush_buffer = 0;                          /* flush buffer yes or no */
+
+      /* Ringbuffer */
+      ring_buffer_t us_ringbuffer = {0, 0, 0, NULL}; /* Init with default null values */
+
+      /* Clock cycles per second, per refresh rate, per raster rate */
+      long cycles_per_sec    = DEFAULT;              /* default @ 1000000 */
+      long cycles_per_frame  = HZ_DEFAULT;           /* default @ 20000 */
+      long cycles_per_raster = R_DEFAULT;            /* default @ 20000 */
+      int clk_retrieved = 0;
+      long us_clkrate = 0;
+      int numsids = 0;
+      int fmoplsid = -1;
+      int pcbversion = -1;
+      int socketconfig = -1;
+
+      /* Threading the needle */
+      int run_thread = 0;
+      std::atomic_int us_thread{0};
+      pthread_mutex_t us_mutex = PTHREAD_MUTEX_INITIALIZER;
+      pthread_cond_t us_cond = PTHREAD_COND_INITIALIZER;
+      pthread_t us_ptid;
 
       /* LIBUSB */
       int LIBUSB_Setup(bool start_threaded, bool with_cycles);
       int LIBUSB_Exit(void);
-      int LIBUSB_Available(libusb_context *ctx_, uint16_t vendor_id, uint16_t product_id);
+      int LIBUSB_Available(uint16_t vendor_id, uint16_t product_id);
       void LIBUSB_StopTransfers(void);
       int LIBUSB_OpenDevice(void);
       void LIBUSB_CloseDevice(void);
@@ -378,7 +376,6 @@ namespace USBSID_NS
       int USBSID_InitThread(void);
       void USBSID_StopThread(void);
       int USBSID_IsRunning(void);
-      pthread_t us_ptid;
 
       /* Ringbuffer */
       void USBSID_InitRingBuffer(int buffer_size, int differ_size);
@@ -392,12 +389,17 @@ namespace USBSID_NS
 
       /* Ringbuffer reads & writes*/
       void USBSID_RingPopCycled(void);  /* Threaded writer with cycles */
-      void USBSID_RingPop(void);  /* Threaded writer */
+      void USBSID_RingPop(void);        /* Threaded writer */
 
     public:
 
       USBSID_Class();   /* Constructor */
       ~USBSID_Class();  /* Deconstructor */
+
+      /* Multiboard device targeting, must be called before USBSID_Init() */
+      void USBSID_SetTargetSerial(const std::string &serial) { want_serial = serial; }
+      void USBSID_SetTargetIndex(int idx) { want_index = idx; }
+      const std::string& USBSID_GetSerial(void) const { return opened_serial; }
 
       /* USBSID */
       int USBSID_Init(bool start_threaded, bool with_cycles);                  /* Well it inits? */
@@ -473,11 +475,19 @@ namespace USBSID_NS
 
       /* Timing and cycles */
       uint_fast64_t USBSID_WaitForCycle(uint_fast16_t cycles);                 /* Sleep for n cycles */
-      uint_fast64_t USBSID_WaitForCycle_(uint_fast16_t cycles);                /* Sleep for n cycles ~ deprecated */
       void USBSID_SyncTime(void);                                              /* Sync time for cycle delay function */
   };
 
-} /* USBSIDDriver */
+  /* Enumerate every VID/PID-matching USBSID-Pico currently attached, without
+   * opening any of them for I/O. Opens each briefly (required by libusb to
+   * read its string descriptors) only to read back its serial number, then
+   * closes it again.
+   * Results are sorted by bus/port-path to identified the first physically
+   * connected board when raw device-list order isn't guaranteed to be
+   * that across platforms */
+  std::vector<USBSID_DeviceInfo> USBSID_EnumerateDevices(void);
+
+} /* USBSID_NS (USBSIDDriver) */
 
 
 #ifdef USBSID_OPTOFF
