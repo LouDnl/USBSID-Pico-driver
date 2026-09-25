@@ -369,7 +369,9 @@ namespace USBSID_NS
       static void LIBUSB_CALL usb_in(struct libusb_transfer *transfer);
 
       /* Line encoding ~ baud rate is ignored by TinyUSB */
+#ifndef USE_VENDOR_ITF /* CDC only, see LIBUSB_ConfigureDevice() */
       unsigned char encoding[7] = { 0x40, 0x54, 0x89, 0x00, 0x00, 0x00, 0x08 };  // 9000000 ~ 0x895440
+#endif
 
       /* Threading */
       void* USBSID_Thread(void);
