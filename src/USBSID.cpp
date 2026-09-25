@@ -254,7 +254,7 @@ void USBSID_Class::USBSID_ClearBus(void)
 void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles, bool suspend_sids)
 {
   if (!us_PortIsOpen) return;
-  for (uint8_t i = 0; i < 4; i++) {
+  for (uint8_t i = 0; i < (sizeof(clockSpeed) / sizeof(clockSpeed[0])); i++) {
     if (clockSpeed[i] == clockrate_cycles) {
       cycles_per_sec = clockSpeed[i];
       cycles_per_frame = refreshRate[i];
