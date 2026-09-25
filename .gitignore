@@ -16,7 +16,6 @@
 !*.py
 !*.am
 !*.xml
-!*.md
 
 # And not these specific files
 !.gitignore
@@ -26,6 +25,11 @@
 !testbuild.sh
 
 # Not these directories and their contents
+!.github
+!.github/workflows
+!.github/workflows/**
+!.gitlab
+!.gitlab/**
 !src
 !src/**
 !test
@@ -44,6 +48,11 @@
 !java/usbsid-usb-driver-library-java/resources/javax.usb.properties
 !java/usbsid-usb-driver-library-java/resources/logging.properties
 !java/usbsid-usb-driver-library-java/target/
+!javascript
+!javascript/webusb-jsSID
+!javascript/webusb-jsSID/*
+!javascript/webusb-jsSID-worker_driver
+!javascript/webusb-jsSID-worker_driver/*
 !libusbsiddrv-vice
 !libusbsiddrv-vice/*
 !webusb
