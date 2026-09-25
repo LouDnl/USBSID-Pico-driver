@@ -1,0 +1,62 @@
+name: Java driver build
+
+# Build the Java driver JAR with Maven on every supported JDK. Tests are
+# compiled but not run: ConnectTest needs a USBSID-Pico attached.
+# The JDK 17 build (maven.compiler.release) is uploaded for
+# release-java.yml, which calls this workflow.
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'java/**'
+      - '.github/workflows/build-java.yml'
+  pull_request:
+    paths:
+      - 'java/**'
+      - '.github/workflows/build-java.yml'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: JDK ${{ matrix.java }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['17', '21', '25']
+    defaults:
+      run:
+        working-directory: java/usbsid-usb-driver-library-java
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+          cache-dependency-path: java/usbsid-usb-driver-library-java/pom.xml
+
+      - name: Build JAR
+        run: mvn -B -ntp -DskipTests package
+
+      - name: List build output
+        run: ls -l target/*.jar dependency-reduced-pom.xml
+
+      - name: Upload JAR and POM
+        if: matrix.java == '17'
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-driver
+          path: |
+            java/usbsid-usb-driver-library-java/target/usbsid-usb-driver-library-java-*.jar
+            java/usbsid-usb-driver-library-java/dependency-reduced-pom.xml
+          if-no-files-found: error

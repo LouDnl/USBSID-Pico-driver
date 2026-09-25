@@ -1,0 +1,79 @@
+name: C/C++ driver build
+
+# Build and test compile the C/C++ driver in src/ and libusbsiddrv-vice/ on
+# every platform. The build and the tests live in test/ci/build.sh, shared
+# with the GitLab pipeline. Also called by release-native.yml.
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'src/**'
+      - 'libusbsiddrv-vice/**'
+      - 'test/ci/**'
+      - '.github/workflows/build-native.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'libusbsiddrv-vice/**'
+      - 'test/ci/**'
+      - '.github/workflows/build-native.yml'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.target }} ${{ matrix.platform.name }}
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [src, vice]
+        platform:
+          # C++11 is the minimum, VICE configure falls back to it
+          - { name: linux-gcc,       os: ubuntu-latest,  shell: bash,        cc: gcc,   cxx: g++,     cxxstds: 'c++11 c++14 c++17 c++20' }
+          - { name: linux-clang,     os: ubuntu-latest,  shell: bash,        cc: clang, cxx: clang++, cxxstds: 'c++11 c++14 c++17 c++20' }
+          - { name: macos-arm64,     os: macos-14,       shell: bash,        cc: clang, cxx: clang++, cxxstds: 'c++17' }
+          - { name: macos-x86_64,    os: macos-15-intel, shell: bash,        cc: clang, cxx: clang++, cxxstds: 'c++17' }
+          - { name: windows-mingw64, os: windows-2022,   shell: 'msys2 {0}', cc: gcc,   cxx: g++,     cxxstds: 'c++17', msystem: MINGW64 }
+          - { name: windows-clang64, os: windows-2022,   shell: 'msys2 {0}', cc: clang, cxx: clang++, cxxstds: 'c++17', msystem: CLANG64 }
+    defaults:
+      run:
+        shell: ${{ matrix.platform.shell }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang pkg-config libusb-1.0-0-dev
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install libusb pkgconf
+
+      - name: Set up MSYS2 (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.platform.msystem }}
+          update: true
+          pacboy: >-
+            toolchain:p
+            libusb:p
+            pkgconf:p
+
+      - name: Build and test ${{ matrix.target }}
+        env:
+          CC: ${{ matrix.platform.cc }}
+          CXX: ${{ matrix.platform.cxx }}
+          CXXSTDS: ${{ matrix.platform.cxxstds }}
+        run: bash test/ci/build.sh ${{ matrix.target }}

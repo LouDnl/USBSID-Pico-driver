@@ -1,0 +1,81 @@
+name: Java driver release
+
+# Tag java-v<version> (e.g. java-v1.2) releases the Java driver JAR and POM,
+# versioned apart from the C/C++ driver. <version> must equal the <version>
+# in java/usbsid-usb-driver-library-java/pom.xml, test/ci/package.sh fails
+# the release otherwise.
+
+on:
+  push:
+    tags:
+      - 'java-v[0-9]*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    uses: ./.github/workflows/build-java.yml
+
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#java-v}" >> "$GITHUB_OUTPUT"
+
+      # Replaces the JAR tracked in git with the one just built
+      - name: Download JAR and POM
+        uses: actions/download-artifact@v4
+        with:
+          name: java-driver
+          path: java/usbsid-usb-driver-library-java
+
+      - name: Package JAR and POM
+        run: bash test/ci/package.sh java "${{ steps.version.outputs.version }}" release
+
+      - name: Generate release notes
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          # Previous Java release tag, C/C++ tags excluded
+          PREV=$(git tag --list 'java-v[0-9]*' --sort=-version:refname | grep -vx "$TAG" | head -n 1 || true)
+          {
+            echo "Java driver library for USBSID-Pico, built with JDK 17 (Java 17 bytecode)."
+            echo
+            echo "- \`usbsid-usb-driver-library-java-*.jar\`: driver library"
+            echo "- \`usbsid-usb-driver-library-java-*.pom\`: dependency reduced POM, for a local Maven install"
+            echo
+            echo "**Commits in this release:**"
+            if [ -n "$PREV" ]; then
+              git log "$PREV..$TAG" --oneline -- java
+            else
+              git log "$TAG" --oneline -- java
+            fi
+          } > release_notes.md
+          cat release_notes.md
+
+      - name: Create release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.version.outputs.tag }}
+          name: Java driver ${{ steps.version.outputs.tag }}
+          bodyFile: release_notes.md
+          artifacts: 'release/*.jar,release/*.pom,release/SHA256SUMS'
+          prerelease: false
+          makeLatest: 'false'
+          allowUpdates: true
+          removeArtifacts: true

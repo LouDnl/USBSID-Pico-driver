@@ -1,0 +1,74 @@
+name: C/C++ driver release
+
+# Tag v<version> (e.g. v1.0.0) releases the C/C++ driver: source archives
+# of src/ and libusbsiddrv-vice/, published only after every platform
+# build in build-native.yml passes. The Java driver has its own tags and
+# workflow, see release-java.yml.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    uses: ./.github/workflows/build-native.yml
+
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Package source archives
+        run: bash test/ci/package.sh native "${{ steps.version.outputs.version }}" release
+
+      - name: Generate release notes
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          # Previous C/C++ release tag, Java tags excluded
+          PREV=$(git tag --list 'v[0-9]*' --sort=-version:refname | grep -vx "$TAG" | head -n 1 || true)
+          {
+            echo "C/C++ driver source for USBSID-Pico."
+            echo
+            echo "- \`USBSID-Pico-driver-src-*\`: \`src/\`, C++ driver, C interface and multiboard manager"
+            echo "- \`USBSID-Pico-driver-vice-*\`: \`libusbsiddrv-vice/\`, the copy used by VICE"
+            echo
+            echo "**Commits in this release:**"
+            if [ -n "$PREV" ]; then
+              git log "$PREV..$TAG" --oneline -- src libusbsiddrv-vice
+            else
+              git log "$TAG" --oneline -- src libusbsiddrv-vice
+            fi
+          } > release_notes.md
+          cat release_notes.md
+
+      - name: Create release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.version.outputs.tag }}
+          name: C/C++ driver ${{ steps.version.outputs.tag }}
+          bodyFile: release_notes.md
+          artifacts: 'release/*.tar.gz,release/*.zip,release/SHA256SUMS'
+          prerelease: false
+          makeLatest: 'true'
+          allowUpdates: true
+          removeArtifacts: true
