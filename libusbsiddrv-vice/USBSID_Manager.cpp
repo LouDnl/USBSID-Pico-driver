@@ -25,6 +25,7 @@
  *
  */
 
+#include <algorithm>
 #include <cstring>
 #include "USBSID_Manager.h"
 
@@ -89,6 +90,11 @@ bool USBSID_Manager::OpenAll(
   return !devices_.empty();
 }
 
+/* BuildLogicalMap() follows each board's own configuration: a board's SIDs
+ * are numbered by the SID id its firmware gave them (READ_SOCKETCFG bytes 8
+ * and 9, one nibble per socket SID), and that id is also the register block
+ * the firmware routes to it (id * 0x20). Default presets keep ids in socket
+ * order, flipped and mixed presets do not: socket order alone falls short. */
 void USBSID_Manager::BuildLogicalMap(void)
 {
   logical_map_.clear();
@@ -96,29 +102,58 @@ void USBSID_Manager::BuildLogicalMap(void)
   for (size_t b = 0; b < boards_.size(); b++) {
     BoardInfo &board = boards_[b];
 
-    int local_slot = 0;
-
     if (!board.socketconfig_valid) {
       /* No usable socket config reply for this board. Fall back to its flat
        * SID count with an unknown type rather than dropping it entirely. */
       for (int n = 0; n < board.numsids; n++) {
-        logical_map_.push_back({(int)b, local_slot++, 0});
+        logical_map_.push_back({(int)b, n, 0});
       }
       continue;
     }
 
     auto &dev = devices_[b];
+    const uint8_t *cfg = board.socketconfig;
+    const bool mirrored = (cfg[10] & 0x1) != 0;
+
+    /* Every configured SID in socket order, with its firmware id */
+    struct Found { int id; int type; };
+    std::vector<Found> found;
     for (int socket = 1; socket <= 2; socket++) {
       int n = dev->USBSID_GetSocketNumSIDS(socket, board.socketconfig);
       if (n <= 0) continue;
-
-      int t1 = dev->USBSID_GetSocketSIDType1(socket, board.socketconfig);
-      logical_map_.push_back({(int)b, local_slot++, t1});
-
+      const uint8_t ids = cfg[(socket == 1) ? 8 : 9];
+      found.push_back({ids & 0xF, dev->USBSID_GetSocketSIDType1(socket, board.socketconfig)});
       if (n == 2) {
-        int t2 = dev->USBSID_GetSocketSIDType2(socket, board.socketconfig);
-        logical_map_.push_back({(int)b, local_slot++, t2});
+        found.push_back({(ids >> 4) & 0xF,
+                         dev->USBSID_GetSocketSIDType2(socket, board.socketconfig)});
       }
+    }
+
+    /* Ids are 0..3 and, unless mirrored, each one used once. Anything else
+     * (a firmware that does not fill bytes 8/9 sends all zeroes) falls back
+     * to socket order, which is what such a firmware routes by as well. */
+    bool ids_valid = true;
+    uint8_t seen = 0;
+    for (const Found &f : found) {
+      if (f.id > 3 || (!mirrored && (seen & (1u << f.id)) != 0)) { ids_valid = false; break; }
+      seen |= (uint8_t)(1u << f.id);
+    }
+    if (!ids_valid) {
+      for (size_t n = 0; n < found.size(); n++) {
+        logical_map_.push_back({(int)b, (int)n, found[n].type});
+      }
+      continue;
+    }
+
+    /* In id order. A mirrored id (two sockets on one address) is one slot:
+     * a write to it reaches both, the first socket's type describes it. */
+    std::stable_sort(found.begin(), found.end(),
+                     [](const Found &x, const Found &y) { return x.id < y.id; });
+    int last_id = -1;
+    for (const Found &f : found) {
+      if (f.id == last_id) continue;
+      logical_map_.push_back({(int)b, f.id, f.type});
+      last_id = f.id;
     }
   }
 }

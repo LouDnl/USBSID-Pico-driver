@@ -113,6 +113,7 @@ USBSID_Class::~USBSID_Class()
       us_Initialised = false;
     }
   }
+  USBSID_DeInitRingBuffer(); /* no-op after Close(), frees a ring left by a failed thread start */
   if (write_buffer) us_free(write_buffer);
   if (thread_buffer) us_free(thread_buffer);
   if (result) us_free(result);
@@ -855,10 +856,10 @@ void USBSID_Class::USBSID_StopThread(void)
     run_thread = flush_buffer = 0;
     pthread_cond_signal(&us_cond);
     pthread_mutex_unlock(&us_mutex);
-    USBSID_DeInitRingBuffer();
     pthread_join(us_ptid, NULL);
     USBDBG(stdout, "[USBSID] Thread attached\r\n");
     threaded = withcycles = false;
+    USBSID_DeInitRingBuffer(); /* after the join, the thread reads the ring until it exits */
     while (us_thread > 0) {};
     pthread_mutex_destroy(&us_mutex);
   }
@@ -951,7 +952,9 @@ void USBSID_Class::USBSID_InitRingBuffer(int buffer_size, int differ_size)
   USBSID_SetBufferSize(buffer_size);
   USBSID_SetDiffSize(differ_size);
   USBSID_ResetRingBuffer();
+  if (us_ringbuffer.is_allocated == 1) us_free(us_ringbuffer.ringbuffer); /* no leak on re-init */
   us_ringbuffer.ringbuffer = us_alloc(2 * ring_size, (sizeof(uint8_t)) * ring_size);
+  us_ringbuffer.is_allocated = (us_ringbuffer.ringbuffer != NULL) ? 1 : 0;
   USBDBG(stdout, "[USBSID] Init RingBuffer with size: %d and diffsize: %d\n",
      buffer_size, differ_size);
   return;
@@ -962,8 +965,9 @@ void USBSID_Class::USBSID_InitRingBuffer(void)
   USBSID_SetBufferSize(ring_size);
   USBSID_SetDiffSize(diff_size);
   USBSID_ResetRingBuffer();
+  if (us_ringbuffer.is_allocated == 1) us_free(us_ringbuffer.ringbuffer); /* no leak on re-init */
   us_ringbuffer.ringbuffer = us_alloc(2 * ring_size, (sizeof(uint8_t)) * ring_size);
-  us_ringbuffer.is_allocated = 1;
+  us_ringbuffer.is_allocated = (us_ringbuffer.ringbuffer != NULL) ? 1 : 0;
   USBDBG(stdout, "[USBSID] Init RingBuffer with default size: %d and default diffsize: %d\n",
      ring_size, diff_size);
   return;
@@ -975,13 +979,21 @@ void USBSID_Class::USBSID_DeInitRingBuffer(void)
   USBSID_SetBufferSize(default_ring_size);
   USBSID_SetDiffSize(default_diff_size);
   if (us_ringbuffer.is_allocated == 1) us_free(us_ringbuffer.ringbuffer);
+  us_ringbuffer.ringbuffer = NULL; /* a second call must not free again */
+  us_ringbuffer.is_allocated = 0;
   return;
 }
 
 void USBSID_Class::USBSID_RestartRingBuffer(void)
 { /* This function can be deprecated in favour of using deinit and init */
   if (!us_PortIsOpen) return;
+  /* Store diff and ring size for fun and profit lol */
+  int temp_diff_size = diff_size;
+  int temp_ring_size = ring_size;
   USBSID_DeInitRingBuffer();
+  /* Reassigned previous sizes */
+  diff_size = temp_diff_size;
+  ring_size = temp_ring_size;
   USBSID_InitRingBuffer();
   return;
 }

@@ -54,6 +54,8 @@ extern "C" {
   } USBSIDboardinfo;
 
   /* Logical SID to board mapping
+   * local_slot: the board's own SID number, 0 based, as its config assigns
+   *             it; local_slot * 0x20 is that SID's register block
    * sid_type: 0 unknown, 1 N/A, 2 MOS8580, 3 MOS6581, 4 FMopl */
   typedef struct {
     int board_index;

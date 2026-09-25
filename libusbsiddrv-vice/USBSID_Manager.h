@@ -71,7 +71,11 @@ class USBSID_Manager {
 
     /* One `LogicalSlot` per (virtual) SID per board. This information is stored
      * to identify a SID in regard to thes present board and what the SIDType is.
-     * (0 unknown, 1 N/A, 2 MOS8580, 3 MOS6581, 4 FMopl) is */
+     * (0 unknown, 1 N/A, 2 MOS8580, 3 MOS6581, 4 FMopl) is
+     * `local_slot` is the board's own SID number, 0 based, as its config
+     * assigns it (the SID id). `local_slot * 0x20` is the register block
+     * the board routes to that SID. A board's slots are listed in that
+     * order, following flipped/mixed socket presets. */
     struct LogicalSlot {
       int board_index;
       int local_slot;
