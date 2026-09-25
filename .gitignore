@@ -33,9 +33,9 @@
 !src
 !src/**
 !test
-!test/**
-!build
-!build/**
+!test/build
+!test/ci
+!test/ci/**
 !java
 !java/usbsid-usb-driver-library-java/
 !java/usbsid-usb-driver-library-java/lib
