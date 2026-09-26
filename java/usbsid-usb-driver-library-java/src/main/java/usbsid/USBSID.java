@@ -99,12 +99,9 @@ public class USBSID extends USBSIDDevice implements IUSBSID {
     ring_read = (ring_read + 1) % ring_buffer.length;
     return item;
   }
-  private boolean higher() {
-    return (ring_read < ring_write);
-  }
   private int diff() {
-    int d = (higher() ? (ring_read - ring_write) : (ring_write - ring_read));
-    return ((d < 0) ? (d * -1) : d);
+    /* Bytes waiting in the ring, counted across the wrap-around */
+    return (ring_write - ring_read + ring_buffer.length) % ring_buffer.length;
   }
 
   private Thread USBSID_Thread = new Thread(new Runnable() {
