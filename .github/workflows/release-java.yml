@@ -8,7 +8,8 @@ name: Java driver release
 on:
   push:
     tags:
-      - 'java-v([0-9]|\.)-'
+      - 'java-v[0-9]+.[0-9]+'
+      - 'java-v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
 
 permissions:
@@ -34,7 +35,12 @@ jobs:
       - name: Version from tag
         id: version
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
+          # Manual runs must pick a tag under "Use workflow from", not a branch
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "::error::Run from a tag, not branch '$GITHUB_REF_NAME'"
+            exit 1
+          fi
+          TAG="$GITHUB_REF_NAME"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#java-v}" >> "$GITHUB_OUTPUT"
 
