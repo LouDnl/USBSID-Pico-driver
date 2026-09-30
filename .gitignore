@@ -21,6 +21,7 @@
 !.gitignore
 !README.md
 !LICENSE
+!LICENSE-EXCEPTION
 !javax.usb.properties
 !testbuild.sh
 
