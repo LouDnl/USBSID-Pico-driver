@@ -440,6 +440,9 @@ namespace USBSID_NS
       void USBSID_ClearBus(void);                                              /* Clear the SID bus from any data */
       void USBSID_SetClockRate(long clockrate_cycles,                          /* Set CPU clockrate in Hertz */
                                bool suspend_sids);                             /* Assert SID RES signal while changing clockrate (Advised!)*/
+      void USBSID_SetClockRate(long clockrate_cycles,                          /* Set CPU clockrate in Hertz */
+                               bool suspend_sids,                              /* Assert SID RES signal while changing clockrate (Advised!)*/
+                               bool force);                                    /* Send the command even if the board is known to run at this rate */
       long USBSID_GetClockRate(void);                                          /* Get CPU clockrate in Hertz  */
       long USBSID_GetRefreshRate(void);                                        /* Get cycles per refresh rate */
       long USBSID_GetRasterRate(void);                                         /* Get cycles per raster rate */

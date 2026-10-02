@@ -126,6 +126,10 @@ extern "C"
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_SetClockRate(clockrate_cycles, suspend_sids);
   };
+  void setclockrateforced_USBSID(USBSIDitf p, long clockrate_cycles, bool suspend_sids, bool force){
+    if( p == NULL ) return;
+    return ((USBSID_Class*)p)->USBSID_SetClockRate(clockrate_cycles, suspend_sids, force);
+  };
   long getclockrate_USBSID(USBSIDitf p){
     if( p == NULL ) return 0;
     return ((USBSID_Class*)p)->USBSID_GetClockRate();

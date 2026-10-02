@@ -71,6 +71,7 @@ extern "C" {
   void unmute_USBSID(USBSIDitf);
   void setmuted_USBSID(USBSIDitf, bool muted);  /* sets the firmware muted state, volume writes stay masked while muted */
   void setclockrate_USBSID(USBSIDitf, long clockrate_cycles, bool suspend_sids);
+  void setclockrateforced_USBSID(USBSIDitf, long clockrate_cycles, bool suspend_sids, bool force);  /* force: send even if the rate is unchanged */
   long getclockrate_USBSID(USBSIDitf);
   long getrefreshrate_USBSID(USBSIDitf);
   long getrasterrate_USBSID(USBSIDitf);

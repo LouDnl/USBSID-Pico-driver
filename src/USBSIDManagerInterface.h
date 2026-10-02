@@ -130,6 +130,7 @@ extern "C" {
   void muteall_USBSIDMgr(USBSIDmgr);
   void setmutedall_USBSIDMgr(USBSIDmgr, bool muted);  /* sets the firmware muted state */
   void setclockrateall_USBSIDMgr(USBSIDmgr, long clockrate_cycles, bool suspend_sids);
+  void setclockrateallforced_USBSIDMgr(USBSIDmgr, long clockrate_cycles, bool suspend_sids, bool force);  /* force: send even if the rate is unchanged */
 
 #ifdef __cplusplus
 }

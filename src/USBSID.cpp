@@ -255,7 +255,14 @@ void USBSID_Class::USBSID_ClearBus(void)
 }
 
 void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles, bool suspend_sids)
-{
+{ /* Only sends the command if the requested rate differs from the known board rate */
+  USBSID_SetClockRate(clockrate_cycles, suspend_sids, false);
+  return;
+}
+
+void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles, bool suspend_sids, bool force)
+{ /* `force` sends the command regardless of the known board rate, for callers
+   * that switch rates during use (e.g. a tracker changing PAL/NTSC per tune) */
   if (!us_PortIsOpen) return;
   for (uint8_t i = 0; i < (sizeof(clockSpeed) / sizeof(clockSpeed[0])); i++) {
     if (clockSpeed[i] == clockrate_cycles) {
@@ -270,7 +277,7 @@ void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles, bool suspend_sids)
       USBDBG(stdout, "[USBSID] CPU cycle duration in nanoseconds %f\n", us_CPUcycleDuration);
       USBDBG(stdout, "[USBSID] Inverted CPU cycle duration in nanoseconds %.09f\n",
         us_InvCPUcycleDurationNanoSeconds);
-      if (clk_retrieved == 0 || us_clkrate != cycles_per_sec) {
+      if (force || clk_retrieved == 0 || us_clkrate != cycles_per_sec) {
         uint8_t configbuff[6] = {
           (COMMAND << 6 | CONFIG),
           0x50,
@@ -278,6 +285,7 @@ void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles, bool suspend_sids)
           (uint8_t)(suspend_sids == true ? 1 : 0),
           0, 0};
         USBSID_SingleWrite(configbuff, 6);
+        us_clkrate = cycles_per_sec;  /* Keep the known board rate current */
       }
       USBSID_SyncTime();
       return;

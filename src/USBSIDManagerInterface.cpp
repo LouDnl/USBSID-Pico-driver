@@ -162,4 +162,8 @@ extern "C"
     if( m == NULL ) return;
     return ((USBSID_Manager*) m)->SetClockRateAll(clockrate_cycles, suspend_sids);
   };
+  void setclockrateallforced_USBSIDMgr(USBSIDmgr m, long clockrate_cycles, bool suspend_sids, bool force){
+    if( m == NULL ) return;
+    return ((USBSID_Manager*) m)->SetClockRateAll(clockrate_cycles, suspend_sids, force);
+  };
 }

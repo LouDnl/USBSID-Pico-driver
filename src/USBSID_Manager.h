@@ -145,6 +145,7 @@ class USBSID_Manager {
     void MuteAll(void);
     void SetMutedAll(bool muted);  /* Sets the firmware muted state, see USBSID_SetMuted() */
     void SetClockRateAll(long clockrate_cycles, bool suspend_sids);
+    void SetClockRateAll(long clockrate_cycles, bool suspend_sids, bool force);  /* force: send even if the rate is unchanged */
 
   private:
     std::vector<std::unique_ptr<USBSID_NS::USBSID_Class>> devices_;

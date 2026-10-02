@@ -243,5 +243,10 @@ void USBSID_Manager::SetMutedAll(bool muted)
 
 void USBSID_Manager::SetClockRateAll(long clockrate_cycles, bool suspend_sids)
 {
-  for (auto &dev : devices_) dev->USBSID_SetClockRate(clockrate_cycles, suspend_sids);
+  SetClockRateAll(clockrate_cycles, suspend_sids, false);
+}
+
+void USBSID_Manager::SetClockRateAll(long clockrate_cycles, bool suspend_sids, bool force)
+{
+  for (auto &dev : devices_) dev->USBSID_SetClockRate(clockrate_cycles, suspend_sids, force);
 }
