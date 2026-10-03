@@ -48,6 +48,20 @@ int main(void)
     us.USBSID_WriteRingCycledN(items, 2);
     us.USBSID_SetMuted(true);
     us.USBSID_SetMuted(false);
+    us.USBSID_SetPassive(true);
+    check(us.USBSID_SendCommand(items, 4) == -1, "sendcommand without connection");
+    uint8_t reply[5] = {0};
+    check(us.USBSID_ReadResponse(reply, 1) == -1, "readresponse without connection");
+    check(us.USBSID_SendConfig(US_FEATURES, 0, 0, 0, 0) == -1, "sendconfig without connection");
+    check(us.USBSID_GetFeatures() == -1, "getfeatures without connection");
+    check(us.USBSID_UploadTune(items, sizeof items, UPLOAD_FILE_SID) == -1, "uploadtune without connection");
+    check(us.USBSID_UploadTune(nullptr, 4, UPLOAD_FILE_SID) == -1, "uploadtune NULL data");
+    check(us.USBSID_PlayerSetPlaytime(1000) == -1, "playersetplaytime without connection");
+    check(us.USBSID_PlayerLoad(0) == -1, "playerload without connection");
+    check(us.USBSID_PlayerCommand(SID_PLAYER_STOP) == -1, "playercommand without connection");
+    check(us.USBSID_PlayerMute(0, 0, true) == -1, "playermute without connection");
+    check(us.USBSID_PlayerTime() == -1, "playertime without connection");
+    check(!us.USBSID_PlayerMuted(reply), "playermuted without connection");
     check(us.USBSID_Close() == 0, "close unopened");
   }
 
@@ -60,6 +74,8 @@ int main(void)
     check(mgr.BoardCount() == 0, "mgr boardcount");
     check(mgr.Boards().empty(), "mgr boards");
     check(mgr.LogicalMap().empty(), "mgr logicalmap");
+    check(mgr.Board(0) == nullptr, "mgr board out of range");
+    check(mgr.Board(-1) == nullptr, "mgr board negative");
     mgr.WriteRing(0, 0x18, 0x0F);
     mgr.WriteRingCycled(-1, 0x18, 0x0F, 8);
     check(mgr.Read(0, 0x1B) == 0, "mgr read");

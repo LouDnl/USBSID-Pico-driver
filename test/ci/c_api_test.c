@@ -52,6 +52,18 @@ int main(void)
   check(ringfree_USBSID(NULL) == 0, "ringfree NULL");
   writeringcycledn_USBSID(NULL, items, 1);
   setmuted_USBSID(NULL, true);
+  setpassive_USBSID(NULL, true);
+  check(sendcommand_USBSID(NULL, items, 4) == -1, "sendcommand NULL");
+  check(readresponse_USBSID(NULL, cfg, 1) == -1, "readresponse NULL");
+  check(sendconfig_USBSID(NULL, 0x82, 0, 0, 0, 0) == -1, "sendconfig NULL");
+  check(getfeatures_USBSID(NULL) == -1, "getfeatures NULL");
+  check(uploadtune_USBSID(NULL, items, 4, USBSID_UPLOAD_FILE_SID) == -1, "uploadtune NULL");
+  check(playersetplaytime_USBSID(NULL, 1000) == -1, "playersetplaytime NULL");
+  check(playerload_USBSID(NULL, 0) == -1, "playerload NULL");
+  check(playercommand_USBSID(NULL, USBSID_PLAYER_STOP) == -1, "playercommand NULL");
+  check(playermute_USBSID(NULL, 1, 1, true) == -1, "playermute NULL");
+  check(playertime_USBSID(NULL) == -1, "playertime NULL");
+  check(!playermuted_USBSID(NULL, cfg), "playermuted NULL");
   close_USBSID(NULL);
 
   /* Unopened handle */
@@ -77,6 +89,15 @@ int main(void)
   writeringcycledn_USBSID(us, NULL, 1);
   setmuted_USBSID(us, true);
   setmuted_USBSID(us, false);
+  setpassive_USBSID(us, true);
+  check(sendcommand_USBSID(us, items, 4) == -1, "sendcommand without connection");
+  check(readresponse_USBSID(us, cfg, 1) == -1, "readresponse without connection");
+  check(getfeatures_USBSID(us) == -1, "getfeatures without connection");
+  check(uploadtune_USBSID(us, items, 4, USBSID_UPLOAD_FILE_PRG) == -1, "uploadtune without connection");
+  check(playercommand_USBSID(us, USBSID_PLAYER_PAUSE) == -1, "playercommand without connection");
+  check(playertime_USBSID(us) == -1, "playertime without connection");
+  check(!playermuted_USBSID(us, NULL), "playermuted NULL state");
+  check(!playermuted_USBSID(us, cfg), "playermuted without connection");
   close_USBSID(us);
 
   /* Enumeration opens nothing for I/O, zero boards on CI */
@@ -100,6 +121,9 @@ int main(void)
   check(boardcount_USBSIDMgr(mgr) == 0, "mgr boardcount");
   check(!getboardinfo_USBSIDMgr(mgr, 0, &board), "mgr boardinfo");
   check(!getlogicalslot_USBSIDMgr(mgr, 0, &slot), "mgr logicalslot");
+  check(board_USBSIDMgr(NULL, 0) == NULL, "mgr board NULL");
+  check(board_USBSIDMgr(mgr, 0) == NULL, "mgr board out of range");
+  check(board_USBSIDMgr(mgr, -1) == NULL, "mgr board negative");
   writering_USBSIDMgr(mgr, 0, 0x18, 0x0F);
   writeringcycled_USBSIDMgr(mgr, -1, 0x18, 0x0F, 8);
   check(read_USBSIDMgr(mgr, 0, 0x1B) == 0, "mgr read");
