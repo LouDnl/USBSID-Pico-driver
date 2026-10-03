@@ -112,6 +112,17 @@ extern "C" {
    */
   bool getlogicalslot_USBSIDMgr(USBSIDmgr, int logical_sid, USBSIDlogicalslot *out);
 
+  /**
+   * @brief: Borrow an opened board as a USBSIDitf for USBSIDInterface.h calls.
+   *
+   * Owned by the manager: never pass it to close_USBSID(), it is invalid after
+   * closeall_USBSIDMgr() or close_USBSIDMgr().
+   *
+   * @param board: 0-based board index
+   * @return: board handle, NULL if board is out of range
+   */
+  USBSIDitf board_USBSIDMgr(USBSIDmgr, int board);
+
   /* Routed to the board owning logical_sid, reg is board local */
   void writering_USBSIDMgr(USBSIDmgr, int logical_sid, uint8_t reg, uint8_t val);
   void writeringcycled_USBSIDMgr(USBSIDmgr, int logical_sid, uint8_t reg, uint8_t val, uint16_t cycles);

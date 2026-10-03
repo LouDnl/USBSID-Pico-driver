@@ -119,6 +119,12 @@ class USBSID_Manager {
     const std::vector<BoardInfo> & Boards(void) const { return boards_; }
     const std::vector<LogicalSlot> & LogicalMap(void) const { return logical_map_; }
 
+    /** @brief Borrow an open board for direct calls (command channel), nullptr when out of range. */
+    USBSID_NS::USBSID_Class * Board(int index)
+    {
+      return (index >= 0 && index < (int)devices_.size()) ? devices_[index].get() : nullptr;
+    }
+
     /* reg/val are already board local addressing, exactly as a call to a single
      * board would be */
     void WriteRing(int logical_sid, uint8_t reg, uint8_t val);

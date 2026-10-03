@@ -110,6 +110,10 @@ extern "C"
     out->sid_type = map[logical_sid].sid_type;
     return true;
   };
+  USBSIDitf board_USBSIDMgr(USBSIDmgr m, int board){
+    if( m == NULL ) return NULL;
+    return (USBSIDitf) ((USBSID_Manager*) m)->Board(board);
+  };
   void writering_USBSIDMgr(USBSIDmgr m, int logical_sid, uint8_t reg, uint8_t val){
     if( m == NULL ) return;
     return ((USBSID_Manager*) m)->WriteRing(logical_sid, reg, val);

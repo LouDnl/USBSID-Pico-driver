@@ -139,10 +139,12 @@ int USBSID_Class::USBSID_Init(bool start_threaded, bool with_cycles)
         rc = USBSID_InitThread();
       }
       us_PortIsOpen = true;
-      USBSID_Mute();
-      USBSID_ClearBus();
-      USBSID_UnMute();
-      USBSID_GetClockRate();  /* Once on init */
+      if (!passive) {
+        USBSID_Mute();
+        USBSID_ClearBus();
+        USBSID_UnMute();
+        USBSID_GetClockRate();  /* Once on init */
+      }
       return rc;
     } else {
       USBDBG(stdout, "[USBSID] Not found\n");
@@ -570,6 +572,203 @@ int USBSID_Class::USBSID_ReadConfig(unsigned char *buff, size_t len)
     return 0;
   }
   return actual_length;
+}
+
+
+/* COMMAND CHANNEL */
+
+/**
+ * @brief: Send raw command bytes with one synchronous bulk transfer.
+ *
+ * @param buff: bytes to send
+ * @param len: number of bytes
+ * @return: bytes sent, -1 on failure
+ */
+int USBSID_Class::USBSID_SendCommand(const unsigned char *buff, size_t len)
+{
+  if (!us_PortIsOpen || buff == NULL) return -1;
+  int actual_length = 0;
+  int ret = libusb_bulk_transfer(devh, EP_OUT_ADDR, const_cast<unsigned char *>(buff),
+    (int)len, &actual_length, LIBUSB_TIMEOUT);
+  if (ret < 0) {
+    USBERR(stderr, "[USBSID] Error sending command: %d, %s: %s\r\n",
+      ret, libusb_error_name(ret), libusb_strerror((enum libusb_error)ret));
+    return -1;
+  }
+  return actual_length;
+}
+
+/**
+ * @brief: Read one reply with a synchronous bulk transfer.
+ *
+ * @param buff: destination, receives at most len bytes
+ * @param len: maximum number of bytes
+ * @return: bytes read, -1 on failure or timeout
+ */
+int USBSID_Class::USBSID_ReadResponse(unsigned char *buff, size_t len)
+{
+  if (!us_PortIsOpen || buff == NULL) return -1;
+  int actual_length = 0;
+  int ret = LIBUSB_ReadIn(buff, len, &actual_length);
+  if (ret < 0) {
+    USBERR(stderr, "[USBSID] Error reading reply: %d, %s: %s\r\n",
+      ret, libusb_error_name(ret), libusb_strerror((enum libusb_error)ret));
+    return -1;
+  }
+  return actual_length;
+}
+
+/**
+ * @brief: Send a 6 byte config command.
+ *
+ * @param sub: config sub command, byte 1
+ * @param a: byte 2
+ * @param b: byte 3
+ * @param c: byte 4
+ * @param d: byte 5
+ * @return: bytes sent, -1 on failure
+ */
+int USBSID_Class::USBSID_SendConfig(uint8_t sub, uint8_t a, uint8_t b, uint8_t c, uint8_t d)
+{
+  unsigned char buff[6] = {(COMMAND << 6 | CONFIG), sub, a, b, c, d};
+  return USBSID_SendCommand(buff, sizeof(buff));
+}
+
+/**
+ * @brief: Read the firmware feature bitmask (US_FEATURE_*), once per open.
+ *
+ * @return: bitmask, -1 on failure
+ */
+int USBSID_Class::USBSID_GetFeatures(void)
+{
+  if (!us_PortIsOpen) return -1;
+  if (features >= 0) return features;
+  if (USBSID_SendConfig(US_FEATURES, 0, 0, 0, 0) < 0) return -1;
+  unsigned char reply[1] = {0};
+  if (USBSID_ReadResponse(reply, 1) != 1) return -1;
+  features = reply[0];
+  return features;
+}
+
+/**
+ * @brief: Upload a tune to the onboard emulator.
+ *
+ * Sends UPLOAD_SID_START, the data in 62 byte UPLOAD_SID_DATA packets,
+ * UPLOAD_SID_END and UPLOAD_SID_SIZE, every packet 64 bytes.
+ *
+ * @param data: file contents
+ * @param len: file size in bytes
+ * @param filetype: UPLOAD_FILE_SID, UPLOAD_FILE_PRG or UPLOAD_FILE_STDIN
+ * @return: data bytes sent, -1 on failure
+ */
+int USBSID_Class::USBSID_UploadTune(const uint8_t *data, size_t len, uint8_t filetype)
+{
+  if (!us_PortIsOpen || (data == NULL && len > 0)) return -1;
+  unsigned char buff[UPLOAD_PACKET_SIZE] = {0};
+  buff[0] = (COMMAND << 6 | CONFIG);
+  buff[1] = UPLOAD_SID_START;
+  buff[2] = filetype;
+  if (USBSID_SendCommand(buff, UPLOAD_PACKET_SIZE) < 0) return -1;
+
+  size_t sent = 0;
+  while (sent < len) {
+    size_t n = len - sent;
+    if (n > UPLOAD_PAYLOAD_SIZE) n = UPLOAD_PAYLOAD_SIZE;
+    memset(buff, 0, UPLOAD_PACKET_SIZE);
+    buff[0] = (COMMAND << 6 | CONFIG);
+    buff[1] = UPLOAD_SID_DATA;
+    memcpy(&buff[2], data + sent, n);
+    if (USBSID_SendCommand(buff, UPLOAD_PACKET_SIZE) < 0) return -1;
+    sent += n;
+  }
+
+  memset(buff, 0, UPLOAD_PACKET_SIZE);
+  buff[0] = (COMMAND << 6 | CONFIG);
+  buff[1] = UPLOAD_SID_END;
+  if (USBSID_SendCommand(buff, UPLOAD_PACKET_SIZE) < 0) return -1;
+
+  memset(buff, 0, UPLOAD_PACKET_SIZE);
+  buff[0] = (COMMAND << 6 | CONFIG);
+  buff[1] = UPLOAD_SID_SIZE;
+  buff[2] = (uint8_t)((len >> 8) & 0xFF);
+  buff[3] = (uint8_t)(len & 0xFF);
+  if (USBSID_SendCommand(buff, UPLOAD_PACKET_SIZE) < 0) return -1;
+  return (int)sent;
+}
+
+/**
+ * @brief: Set the max play time of the uploaded tune.
+ *
+ * @param ms: play time in milliseconds
+ * @return: bytes sent, -1 on failure
+ */
+int USBSID_Class::USBSID_PlayerSetPlaytime(uint32_t ms)
+{
+  return USBSID_SendConfig(UPLOAD_SID_PLAYTIME,
+    (uint8_t)((ms >> 24) & 0xFF), (uint8_t)((ms >> 16) & 0xFF),
+    (uint8_t)((ms >> 8) & 0xFF), (uint8_t)(ms & 0xFF));
+}
+
+/**
+ * @brief: Load the uploaded tune and start it.
+ *
+ * @param subtune: 0 based subtune
+ * @return: bytes sent, -1 on failure
+ */
+int USBSID_Class::USBSID_PlayerLoad(uint8_t subtune)
+{
+  return USBSID_SendConfig(SID_PLAYER_TUNE, 0, subtune, 0, 0);
+}
+
+/**
+ * @brief: Send a parameterless player command.
+ *
+ * @param cmd: SID_PLAYER_START, STOP, PAUSE, NEXT, PREV or TWO
+ * @return: bytes sent, -1 on failure
+ */
+int USBSID_Class::USBSID_PlayerCommand(uint8_t cmd)
+{
+  return USBSID_SendConfig(cmd, 0, 0, 0, 0);
+}
+
+/**
+ * @brief: Mute or unmute a chip or voice of the onboard player.
+ *
+ * @param chip: 1-4, 0 for all chips (voice must be 0)
+ * @param voice: 1-3, 0 for the whole chip
+ * @param mute: true to mute
+ * @return: bytes sent, -1 on failure
+ */
+int USBSID_Class::USBSID_PlayerMute(uint8_t chip, uint8_t voice, bool mute)
+{
+  return USBSID_SendConfig(SID_PLAYER_MUTE, chip, voice, (uint8_t)(mute ? 1 : 0), 0);
+}
+
+/**
+ * @brief: Read the play time of the current onboard tune.
+ *
+ * @return: milliseconds, -1 on failure
+ */
+long USBSID_Class::USBSID_PlayerTime(void)
+{
+  if (USBSID_SendConfig(SID_PLAYER_TIME, 0, 0, 0, 0) < 0) return -1;
+  unsigned char reply[4] = {0};
+  if (USBSID_ReadResponse(reply, 4) != 4) return -1;
+  return (long)(((uint32_t)reply[0] << 24) | ((uint32_t)reply[1] << 16) |
+                ((uint32_t)reply[2] << 8) | (uint32_t)reply[3]);
+}
+
+/**
+ * @brief: Read the onboard player mute state.
+ *
+ * @param state: 5 byte destination, chip mask then voice masks of chips 1-4
+ * @return: true if state holds a valid reply
+ */
+bool USBSID_Class::USBSID_PlayerMuted(uint8_t state[5])
+{
+  if (state == NULL) return false;
+  if (USBSID_SendConfig(SID_PLAYER_MUTED, 0, 0, 0, 0) < 0) return false;
+  return USBSID_ReadResponse(state, 5) == 5;
 }
 
 
