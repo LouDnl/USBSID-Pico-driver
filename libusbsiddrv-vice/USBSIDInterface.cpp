@@ -43,6 +43,15 @@ using namespace USBSID_NS;
 
 static_assert(USBSID_SOCKETCONFIG_LEN == SOCKET_BUFFER_SIZE,
   "USBSID_SOCKETCONFIG_LEN must match SOCKET_BUFFER_SIZE");
+static_assert(USBSID_UPLOAD_FILE_SID == UPLOAD_FILE_SID && USBSID_UPLOAD_FILE_PRG == UPLOAD_FILE_PRG
+  && USBSID_UPLOAD_FILE_STDIN == UPLOAD_FILE_STDIN, "upload file types must match USBSID.h");
+static_assert(USBSID_PLAYER_START == SID_PLAYER_START && USBSID_PLAYER_STOP == SID_PLAYER_STOP
+  && USBSID_PLAYER_PAUSE == SID_PLAYER_PAUSE && USBSID_PLAYER_NEXT == SID_PLAYER_NEXT
+  && USBSID_PLAYER_PREV == SID_PLAYER_PREV && USBSID_PLAYER_TWO == SID_PLAYER_TWO,
+  "player commands must match USBSID.h");
+static_assert(USBSID_FEATURE_EMULATOR == US_FEATURE_EMULATOR && USBSID_FEATURE_NET == US_FEATURE_NET
+  && USBSID_FEATURE_NSD == US_FEATURE_NSD && USBSID_FEATURE_RGBVU == US_FEATURE_RGBVU
+  && USBSID_FEATURE_RP2350 == US_FEATURE_RP2350, "feature bits must match USBSID.h");
 
 /**
  * @brief: Copy src into a NULL terminated C buffer, truncating if needed.
@@ -125,6 +134,10 @@ extern "C"
   void setclockrate_USBSID(USBSIDitf p, long clockrate_cycles, bool suspend_sids){
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_SetClockRate(clockrate_cycles, suspend_sids);
+  };
+  void setclockrateforced_USBSID(USBSIDitf p, long clockrate_cycles, bool suspend_sids, bool force){
+    if( p == NULL ) return;
+    return ((USBSID_Class*)p)->USBSID_SetClockRate(clockrate_cycles, suspend_sids, force);
   };
   long getclockrate_USBSID(USBSIDitf p){
     if( p == NULL ) return 0;
@@ -232,6 +245,54 @@ extern "C"
   unsigned char readsingle_USBSID(USBSIDitf p, uint8_t reg){
     if( p == NULL ) return 0;
     return ((USBSID_Class*)p)->USBSID_SingleRead(reg);
+  };
+  void setpassive_USBSID(USBSIDitf p, bool on){
+    if( p == NULL ) return;
+    ((USBSID_Class*)p)->USBSID_SetPassive(on);
+  };
+  int sendcommand_USBSID(USBSIDitf p, const unsigned char *buff, size_t len){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_SendCommand(buff, len);
+  };
+  int readresponse_USBSID(USBSIDitf p, unsigned char *buff, size_t len){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_ReadResponse(buff, len);
+  };
+  int sendconfig_USBSID(USBSIDitf p, uint8_t sub, uint8_t a, uint8_t b, uint8_t c, uint8_t d){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_SendConfig(sub, a, b, c, d);
+  };
+  int getfeatures_USBSID(USBSIDitf p){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_GetFeatures();
+  };
+  int uploadtune_USBSID(USBSIDitf p, const uint8_t *data, size_t len, uint8_t filetype){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_UploadTune(data, len, filetype);
+  };
+  int playersetplaytime_USBSID(USBSIDitf p, uint32_t ms){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_PlayerSetPlaytime(ms);
+  };
+  int playerload_USBSID(USBSIDitf p, uint8_t subtune){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_PlayerLoad(subtune);
+  };
+  int playercommand_USBSID(USBSIDitf p, uint8_t cmd){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_PlayerCommand(cmd);
+  };
+  int playermute_USBSID(USBSIDitf p, uint8_t chip, uint8_t voice, bool mute){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_PlayerMute(chip, voice, mute);
+  };
+  long playertime_USBSID(USBSIDitf p){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_PlayerTime();
+  };
+  bool playermuted_USBSID(USBSIDitf p, uint8_t *state){
+    if( p == NULL || state == NULL ) return false;
+    return ((USBSID_Class*)p)->USBSID_PlayerMuted(state);
   };
   void writebuffer_USBSID(USBSIDitf p, unsigned char *buff, size_t len){
     if( p == NULL ) return;

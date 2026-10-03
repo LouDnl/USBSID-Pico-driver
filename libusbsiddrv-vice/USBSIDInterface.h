@@ -41,6 +41,26 @@ extern "C" {
   #define USBSID_PORTPATH_LEN      8  /* USB port path depth */
   #define USBSID_SOCKETCONFIG_LEN 12  /* Raw socket config reply */
 
+  /* Onboard emulator upload file types */
+  #define USBSID_UPLOAD_FILE_STDIN 0x00
+  #define USBSID_UPLOAD_FILE_SID   0x01
+  #define USBSID_UPLOAD_FILE_PRG   0x02
+
+  /* Onboard emulator player commands for playercommand_USBSID() */
+  #define USBSID_PLAYER_START 0xE1
+  #define USBSID_PLAYER_STOP  0xE2
+  #define USBSID_PLAYER_PAUSE 0xE3
+  #define USBSID_PLAYER_NEXT  0xE4
+  #define USBSID_PLAYER_PREV  0xE5
+  #define USBSID_PLAYER_TWO   0xE6
+
+  /* getfeatures_USBSID() bits */
+  #define USBSID_FEATURE_RP2350   0x01
+  #define USBSID_FEATURE_RGBVU    0x04
+  #define USBSID_FEATURE_NET      0x10
+  #define USBSID_FEATURE_NSD      0x20
+  #define USBSID_FEATURE_EMULATOR 0x80
+
   /* Attached board info as returned by enumerate_USBSID() */
   typedef struct {
     char serial[USBSID_SERIAL_LEN];            /* Empty if unreadable */
@@ -71,6 +91,7 @@ extern "C" {
   void unmute_USBSID(USBSIDitf);
   void setmuted_USBSID(USBSIDitf, bool muted);  /* sets the firmware muted state, volume writes stay masked while muted */
   void setclockrate_USBSID(USBSIDitf, long clockrate_cycles, bool suspend_sids);
+  void setclockrateforced_USBSID(USBSIDitf, long clockrate_cycles, bool suspend_sids, bool force);  /* force: send even if the rate is unchanged */
   long getclockrate_USBSID(USBSIDitf);
   long getrefreshrate_USBSID(USBSIDitf);
   long getrasterrate_USBSID(USBSIDitf);
@@ -131,6 +152,51 @@ extern "C" {
   void writesingle_USBSID(USBSIDitf, unsigned char *buff, size_t len);
   unsigned char readsingle_USBSID(USBSIDitf, uint8_t reg);
 
+  /* Command channel, synchronous, use with the thread disabled */
+  /**
+   * @brief: Open without mute, bus clear or clock query, call before init_USBSID().
+   *
+   * @param on: true for a passive open
+   */
+  void setpassive_USBSID(USBSIDitf, bool on);
+  /**
+   * @brief: Send raw command bytes.
+   *
+   * @return: bytes sent, -1 on failure
+   */
+  int sendcommand_USBSID(USBSIDitf, const unsigned char *buff, size_t len);
+  /**
+   * @brief: Read one reply of at most len bytes.
+   *
+   * @return: bytes read, -1 on failure
+   */
+  int readresponse_USBSID(USBSIDitf, unsigned char *buff, size_t len);
+  /**
+   * @brief: Send a 6 byte config command: CONFIG, sub, a, b, c, d.
+   *
+   * @return: bytes sent, -1 on failure
+   */
+  int sendconfig_USBSID(USBSIDitf, uint8_t sub, uint8_t a, uint8_t b, uint8_t c, uint8_t d);
+  /**
+   * @brief: Read the firmware feature bitmask (USBSID_FEATURE_*), cached.
+   *
+   * @return: bitmask, -1 on failure
+   */
+  int getfeatures_USBSID(USBSIDitf);
+  /* Onboard emulator, firmware with ONBOARD_EMULATOR=1 */
+  /**
+   * @brief: Upload a tune file to the onboard emulator.
+   *
+   * @param filetype: USBSID_UPLOAD_FILE_*
+   * @return: data bytes sent, -1 on failure
+   */
+  int uploadtune_USBSID(USBSIDitf, const uint8_t *data, size_t len, uint8_t filetype);
+  int playersetplaytime_USBSID(USBSIDitf, uint32_t ms);  /* max play time, -1 on failure */
+  int playerload_USBSID(USBSIDitf, uint8_t subtune);  /* 0 based subtune, loads and starts */
+  int playercommand_USBSID(USBSIDitf, uint8_t cmd);  /* USBSID_PLAYER_*, -1 on failure */
+  int playermute_USBSID(USBSIDitf, uint8_t chip, uint8_t voice, bool mute);  /* chip 0 = all, voice 0 = chip */
+  long playertime_USBSID(USBSIDitf);  /* play time in ms, -1 on failure */
+  bool playermuted_USBSID(USBSIDitf, uint8_t *state);  /* 5 bytes: chip mask, voice masks chips 1-4 */
   /* Asynchronous direct */
   void writebuffer_USBSID(USBSIDitf p, unsigned char *buff, size_t len);
   void write_USBSID(USBSIDitf, uint8_t reg, uint8_t val);

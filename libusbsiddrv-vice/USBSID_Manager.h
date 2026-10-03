@@ -119,6 +119,12 @@ class USBSID_Manager {
     const std::vector<BoardInfo> & Boards(void) const { return boards_; }
     const std::vector<LogicalSlot> & LogicalMap(void) const { return logical_map_; }
 
+    /** @brief Borrow an open board for direct calls (command channel), nullptr when out of range. */
+    USBSID_NS::USBSID_Class * Board(int index)
+    {
+      return (index >= 0 && index < (int)devices_.size()) ? devices_[index].get() : nullptr;
+    }
+
     /* reg/val are already board local addressing, exactly as a call to a single
      * board would be */
     void WriteRing(int logical_sid, uint8_t reg, uint8_t val);
@@ -145,6 +151,7 @@ class USBSID_Manager {
     void MuteAll(void);
     void SetMutedAll(bool muted);  /* Sets the firmware muted state, see USBSID_SetMuted() */
     void SetClockRateAll(long clockrate_cycles, bool suspend_sids);
+    void SetClockRateAll(long clockrate_cycles, bool suspend_sids, bool force);  /* force: send even if the rate is unchanged */
 
   private:
     std::vector<std::unique_ptr<USBSID_NS::USBSID_Class>> devices_;
