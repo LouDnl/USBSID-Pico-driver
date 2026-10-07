@@ -143,6 +143,11 @@ class USBSID_Manager {
     /* Flush only the board owning `logical_sid` */
     void FlushBoard(int logical_sid);
 
+    /* Board unplugged or no longer accepting writes, see USBSID_IsDeviceLost().
+     * Close and open again to recover */
+    bool BoardLost(int board_index);
+    bool AnyBoardLost(void);
+
     /* Broadcast to every open board, in board open order */
     void FlushAll(void);
     void ResetRingBufferAll(void);

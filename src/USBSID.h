@@ -248,6 +248,7 @@ namespace USBSID_NS
   static const int min_ring_size = 256;
   static const int default_diff_size = 64;
   static const int default_ring_size = 8192;
+  static const int MAX_OUT_FAILURES = 3;     /* failed out transfers in a row that mark the device lost */
 
 
   /* Clockspeed related */
@@ -367,6 +368,8 @@ namespace USBSID_NS
       struct libusb_transfer *transfer_in = NULL;    /* IN-coming transfers (IN to host PC from USB-device) */
       bool transfer_out_pending = false;             /* for better transfer out sync */
       bool transfer_in_pending = false;              /* for better transfer in sync */
+      std::atomic_bool device_lost{false};           /* unplugged or out transfers keep failing */
+      int out_failures = 0;                          /* consecutive failed out transfers */
       bool in_buffer_dma = false;                    /* is the in buffer DMA or not */
       bool out_buffer_dma = false;                   /* is the out buffer DMA or not */
 
@@ -419,6 +422,7 @@ namespace USBSID_NS
       int LIBUSB_DetachKernelDriver(void);
       int LIBUSB_ConfigureDevice(void);
       int LIBUSB_ReadIn(unsigned char *buff, size_t len, int *actual_length);
+      void LIBUSB_CheckLost(int error);
       void LIBUSB_InitOutBuffer(void);
       void LIBUSB_FreeOutBuffer(void);
       void LIBUSB_InitInBuffer(void);
@@ -469,6 +473,7 @@ namespace USBSID_NS
       bool USBSID_isInitialised(void){ return us_Initialised; };               /* Probability 50% */
       bool USBSID_isAvailable(void){ return us_Available; };                   /* Only if you're nice */
       bool USBSID_isOpen(void){ return us_PortIsOpen; };                       /* Adults only */
+      bool USBSID_IsDeviceLost(void){ return device_lost; };                   /* Unplugged or no longer accepting writes, close and open again */
 
       /* USBSID & SID control */
       void USBSID_Pause(void);                                                 /* Pause playing by releasing chipselect pins */

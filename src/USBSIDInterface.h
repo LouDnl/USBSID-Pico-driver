@@ -146,6 +146,7 @@ extern "C" {
   bool initialised_USBSID(USBSIDitf);
   bool available_USBSID(USBSIDitf);
   bool portisopen_USBSID(USBSIDitf);
+  bool devicelost_USBSID(USBSIDitf);  /* unplugged or no longer accepting writes, close and open again */
   // int found_USBSID(USBSIDitf);
 
   /* Synchronous direct */

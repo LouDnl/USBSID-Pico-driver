@@ -132,6 +132,9 @@ extern "C" {
   /* free ringbuffer bytes of the board owning logical_sid, 0 for an unknown SID */
   int ringfreebytes_USBSIDMgr(USBSIDmgr, int logical_sid);
   void flushboard_USBSIDMgr(USBSIDmgr, int logical_sid);
+  /* board unplugged or no longer accepting writes, close and open again */
+  bool boardlost_USBSIDMgr(USBSIDmgr, int board_index);
+  bool anyboardlost_USBSIDMgr(USBSIDmgr);
 
   /* Broadcast to every open board */
   void flushall_USBSIDMgr(USBSIDmgr);

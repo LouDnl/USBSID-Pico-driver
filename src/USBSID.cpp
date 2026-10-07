@@ -515,9 +515,11 @@ void USBSID_Class::USBSID_SingleWrite(unsigned char *buff, size_t len)
 {
   if (!us_PortIsOpen) return;
   int actual_length = 0;
-  if (libusb_bulk_transfer(devh, EP_OUT_ADDR, buff, (int)len, &actual_length, LIBUSB_TIMEOUT) < 0) {
+  const int err = libusb_bulk_transfer(devh, EP_OUT_ADDR, buff, (int)len, &actual_length, LIBUSB_TIMEOUT);
+  if (err < 0) {
     USBERR(stderr, "[USBSID] Error while sending synchronous write buffer of length %d\n",
       actual_length);
+    LIBUSB_CheckLost(err);
   }
   return;
 }
@@ -527,8 +529,10 @@ unsigned char USBSID_Class::USBSID_SingleRead(uint8_t reg)
   if (!us_PortIsOpen) return 0;
   int actual_length;
   unsigned char buff[3] = {(READ << 6), reg, 0};
-  if (libusb_bulk_transfer(devh, EP_OUT_ADDR, buff, 3, &actual_length, LIBUSB_TIMEOUT) < 0) {
+  const int err = libusb_bulk_transfer(devh, EP_OUT_ADDR, buff, 3, &actual_length, LIBUSB_TIMEOUT);
+  if (err < 0) {
     USBERR(stderr, "[USBSID] Error while sending write command for reading\n");
+    LIBUSB_CheckLost(err);
   }
   rc = LIBUSB_ReadIn(result, 1, &actual_length);
   if (rc == LIBUSB_ERROR_TIMEOUT) {
@@ -593,6 +597,7 @@ int USBSID_Class::USBSID_SendCommand(const unsigned char *buff, size_t len)
   if (ret < 0) {
     USBERR(stderr, "[USBSID] Error sending command: %d, %s: %s\r\n",
       ret, libusb_error_name(ret), libusb_strerror((enum libusb_error)ret));
+    LIBUSB_CheckLost(ret);
     return -1;
   }
   return actual_length;
@@ -1410,8 +1415,11 @@ void USBSID_Class::USBSID_SendThreadBuffer(void)
     memset(out_buffer, 0, len_out_buffer);
     memcpy(out_buffer, thread_buffer, len);
     transfer_out_pending = true;
-    if (libusb_submit_transfer(transfer_out) < 0) {
+    const int err = libusb_submit_transfer(transfer_out);
+    if (err < 0) {
       transfer_out_pending = false;
+      out_failures++;
+      LIBUSB_CheckLost(err);
     } else {
       libusb_handle_events_completed(ctx, NULL);
 #ifdef USE_VENDOR_ITF
@@ -1737,10 +1745,26 @@ int USBSID_Class::LIBUSB_ReadIn(unsigned char *buff, size_t len, int *actual_len
   if (ret == LIBUSB_ERROR_PIPE || ret == LIBUSB_ERROR_OVERFLOW) {
     libusb_clear_halt(devh, EP_IN_ADDR);  /* keep the next read working */
   }
+  LIBUSB_CheckLost(ret);
   if (got > (int)len) got = (int)len;
   if (got > 0 && buff != in) memcpy(buff, in, (size_t)got);
   *actual_length = got;
   return ret;
+}
+
+/**
+ * @brief: Mark the device lost on a missing device or repeated out failures
+ *
+ * @param error: libusb error code or transfer status, negative for an error code
+ */
+void USBSID_Class::LIBUSB_CheckLost(int error)
+{
+  if (error == LIBUSB_ERROR_NO_DEVICE || out_failures >= MAX_OUT_FAILURES) {
+    if (!device_lost) {
+      USBERR(stderr, "[USBSID] Device lost, close and open the device again\n");
+    }
+    device_lost = true;
+  }
 }
 
 void USBSID_Class::LIBUSB_InitOutBuffer(void)
@@ -1893,6 +1917,8 @@ void USBSID_Class::LIBUSB_StopTransfers(void)
 int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
 {
   rc = read_completed = write_completed = -1;
+  device_lost = false;
+  out_failures = 0;
   threaded = start_threaded;
   withcycles = with_cycles;
   len_out_buffer = LEN_OUT_BUFFER;
@@ -1985,14 +2011,21 @@ void LIBUSB_CALL USBSID_Class::usb_out(struct libusb_transfer *transfer)
       USBERR(stderr, "[USBSID] Warning: transfer out interrupted with status %d, %s: %s\r",
         transfer->status, libusb_error_name(transfer->status), libusb_strerror((enum libusb_error)transfer->status));
     }
+    const bool cancelled = transfer->status == LIBUSB_TRANSFER_CANCELLED;
     libusb_free_transfer(transfer);
     if (self) {
       self->transfer_out = NULL;
       self->transfer_out_pending = false;
+      if (!cancelled) {
+        /* Out transfer freed, later writes never reach the device */
+        self->out_failures = MAX_OUT_FAILURES;
+        self->LIBUSB_CheckLost(LIBUSB_ERROR_IO);
+      }
     }
     return;
   }
 
+  if (self) self->out_failures = 0;
   if (self && transfer->actual_length != self->len_out_buffer) {
     USBERR(stderr, "[USBSID] Sent data length %d is different from the defined buffer length: %d or actual length %d\r",
       transfer->length, self->len_out_buffer, transfer->actual_length);
@@ -2009,6 +2042,9 @@ void LIBUSB_CALL USBSID_Class::usb_in(struct libusb_transfer *transfer)
     if (transfer->status != LIBUSB_TRANSFER_CANCELLED) {
       USBERR(stderr, "[USBSID] Warning: transfer in interrupted with status '%s'\r",
         libusb_error_name(transfer->status));
+      if (self && transfer->status == LIBUSB_TRANSFER_NO_DEVICE) {
+        self->LIBUSB_CheckLost(LIBUSB_ERROR_NO_DEVICE);
+      }
     }
     libusb_free_transfer(transfer);
     if (self) {

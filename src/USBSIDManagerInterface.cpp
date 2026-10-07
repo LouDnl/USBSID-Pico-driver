@@ -138,6 +138,14 @@ extern "C"
     if( m == NULL ) return;
     return ((USBSID_Manager*) m)->FlushBoard(logical_sid);
   };
+  bool boardlost_USBSIDMgr(USBSIDmgr m, int board_index){
+    if( m == NULL ) return false;
+    return ((USBSID_Manager*) m)->BoardLost(board_index);
+  };
+  bool anyboardlost_USBSIDMgr(USBSIDmgr m){
+    if( m == NULL ) return false;
+    return ((USBSID_Manager*) m)->AnyBoardLost();
+  };
   void flushall_USBSIDMgr(USBSIDmgr m){
     if( m == NULL ) return;
     return ((USBSID_Manager*) m)->FlushAll();

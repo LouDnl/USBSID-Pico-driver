@@ -234,6 +234,11 @@ extern "C"
     if( p == NULL ) return false;
     return ((USBSID_Class*)p)->USBSID_isOpen();
   }
+  bool devicelost_USBSID(USBSIDitf p) {
+    /* Callable without connection */
+    if( p == NULL ) return false;
+    return ((USBSID_Class*)p)->USBSID_IsDeviceLost();
+  }
   // int found_USBSID(USBSIDitf p) {
   //   if( p == NULL ) return -1;
   //   return ((USBSID_Class*)p)->us_Found;
