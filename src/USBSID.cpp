@@ -173,7 +173,7 @@ int USBSID_Class::USBSID_Close(void)
 void USBSID_Class::USBSID_Pause(void)
 {
   if (!us_PortIsOpen) return;
-  USBDBG(stdout, "[USBSID] Pause\r\n");
+  USBDBG(stdout, "[USBSID] Pause\n");
   unsigned char buff[3] = {(COMMAND << 6 | PAUSE), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
   return;
@@ -182,7 +182,7 @@ void USBSID_Class::USBSID_Pause(void)
 void USBSID_Class::USBSID_Reset(void)
 {
   if (!us_PortIsOpen) return;
-  USBDBG(stdout, "[USBSID] Reset\r\n");
+  USBDBG(stdout, "[USBSID] Reset\n");
   unsigned char buff[3] = {(COMMAND << 6 | RESET_SID), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
   flush_buffer = 1;
@@ -193,7 +193,7 @@ void USBSID_Class::USBSID_Reset(void)
 void USBSID_Class::USBSID_ResetAllRegisters(void)
 {
   if (!us_PortIsOpen) return;
-  USBDBG(stdout, "[USBSID] Reset All Registers\r\n");
+  USBDBG(stdout, "[USBSID] Reset All Registers\n");
   unsigned char buff[3] = {(COMMAND << 6 | RESET_SID), 0x1, 0x0};
   USBSID_SingleWrite(buff, 3);
   return;
@@ -202,7 +202,7 @@ void USBSID_Class::USBSID_ResetAllRegisters(void)
 void USBSID_Class::USBSID_Mute(void)
 {
   if (!us_PortIsOpen) return;
-  USBDBG(stdout, "[USBSID] Mute\r\n");
+  USBDBG(stdout, "[USBSID] Mute\n");
   unsigned char buff[3] = {(COMMAND << 6 | MUTE), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
   return;
@@ -211,7 +211,7 @@ void USBSID_Class::USBSID_Mute(void)
 void USBSID_Class::USBSID_UnMute(void)
 {
   if (!us_PortIsOpen) return;
-  USBDBG(stdout, "[USBSID] UnMute\r\n");
+  USBDBG(stdout, "[USBSID] UnMute\n");
   unsigned char buff[3] = {(COMMAND << 6 | UNMUTE), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
   return;
@@ -223,7 +223,7 @@ void USBSID_Class::USBSID_SetMuted(bool muted)
    * USBSID_Mute() sends
    * 0 and only zeroes the volume once, the next volume write is audible again. */
   if (!us_PortIsOpen) return;
-  USBDBG(stdout, "[USBSID] SetMuted %d\r\n", muted);
+  USBDBG(stdout, "[USBSID] SetMuted %d\n", muted);
   unsigned char buff[3] = {(unsigned char)(COMMAND << 6 | (muted ? MUTE : UNMUTE)), 0x1, 0x0};
   USBSID_SingleWrite(buff, 3);
   return;
@@ -232,7 +232,7 @@ void USBSID_Class::USBSID_SetMuted(bool muted)
 void USBSID_Class::USBSID_DisableSID(void)
 {
   if (!us_PortIsOpen) return;
-  USBDBG(stdout, "[USBSID] DisableSID\r\n");
+  USBDBG(stdout, "[USBSID] DisableSID\n");
   unsigned char buff[3] = {(COMMAND << 6 | DISABLE_SID), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
   return;
@@ -241,7 +241,7 @@ void USBSID_Class::USBSID_DisableSID(void)
 void USBSID_Class::USBSID_EnableSID(void)
 {
   if (!us_PortIsOpen) return;
-  USBDBG(stdout, "[USBSID] EnableSID\r\n");
+  USBDBG(stdout, "[USBSID] EnableSID\n");
   unsigned char buff[3] = {(COMMAND << 6 | ENABLE_SID), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
   return;
@@ -250,7 +250,7 @@ void USBSID_Class::USBSID_EnableSID(void)
 void USBSID_Class::USBSID_ClearBus(void)
 {
   if (!us_PortIsOpen) return;
-  USBDBG(stdout, "[USBSID] ClearBus\r\n");
+  USBDBG(stdout, "[USBSID] ClearBus\n");
   unsigned char buff[3] = {(COMMAND << 6 | CLEAR_BUS), 0x0, 0x0};
   USBSID_SingleWrite(buff, 3);
   return;
@@ -595,7 +595,7 @@ int USBSID_Class::USBSID_SendCommand(const unsigned char *buff, size_t len)
   int ret = libusb_bulk_transfer(devh, EP_OUT_ADDR, const_cast<unsigned char *>(buff),
     (int)len, &actual_length, LIBUSB_TIMEOUT);
   if (ret < 0) {
-    USBERR(stderr, "[USBSID] Error sending command: %d, %s: %s\r\n",
+    USBERR(stderr, "[USBSID] Error sending command: %d, %s: %s\n",
       ret, libusb_error_name(ret), libusb_strerror((enum libusb_error)ret));
     LIBUSB_CheckLost(ret);
     return -1;
@@ -616,7 +616,7 @@ int USBSID_Class::USBSID_ReadResponse(unsigned char *buff, size_t len)
   int actual_length = 0;
   int ret = LIBUSB_ReadIn(buff, len, &actual_length);
   if (ret < 0) {
-    USBERR(stderr, "[USBSID] Error reading reply: %d, %s: %s\r\n",
+    USBERR(stderr, "[USBSID] Error reading reply: %d, %s: %s\n",
       ret, libusb_error_name(ret), libusb_strerror((enum libusb_error)ret));
     return -1;
   }
@@ -990,12 +990,12 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff, uint16_t cycle
 
 void* USBSID_Class::USBSID_Thread(void)
 { /* Only starts when threaded == true */
-  USBDBG(stdout, "[USBSID] Thread starting\r\n");
+  USBDBG(stdout, "[USBSID] Thread starting\n");
   #ifdef _GNU_SOURCE
   pthread_setname_np(pthread_self(), "USBSID Thread");
   #endif
   if (withcycles) {
-    USBDBG(stdout, "[USBSID] Thread with cycles\r\n");
+    USBDBG(stdout, "[USBSID] Thread with cycles\n");
   }
   pthread_mutex_lock(&us_mutex);
   while(run_thread == 1) {
@@ -1034,7 +1034,7 @@ void* USBSID_Class::USBSID_Thread(void)
       pthread_cond_timedwait(&us_cond, &us_mutex, &ts);
     }
   }
-  USBDBG(stdout, "[USBSID] Thread finished\r\n");
+  USBDBG(stdout, "[USBSID] Thread finished\n");
   pthread_mutex_unlock(&us_mutex);
   us_thread--;
   pthread_exit(NULL);
@@ -1043,7 +1043,7 @@ void* USBSID_Class::USBSID_Thread(void)
 
 int USBSID_Class::USBSID_InitThread(void)
 {
-  USBDBG(stdout, "[USBSID] Init Thread start\r\n");
+  USBDBG(stdout, "[USBSID] Init Thread start\n");
   /* Init ringbuffer */
   flush_buffer = 0;
   run_thread = buffer_pos = 1;
@@ -1062,15 +1062,15 @@ int USBSID_Class::USBSID_InitThread(void)
 
 void USBSID_Class::USBSID_StopThread(void)
 {
-  USBDBG(stdout, "[USBSID] Stop thread\r\n");
+  USBDBG(stdout, "[USBSID] Stop thread\n");
   if (USBSID_IsRunning() == 1) {
-    USBDBG(stdout, "[USBSID] Set thread exit = 1\r\n");
+    USBDBG(stdout, "[USBSID] Set thread exit = 1\n");
     pthread_mutex_lock(&us_mutex);
     run_thread = flush_buffer = 0;
     pthread_cond_signal(&us_cond);
     pthread_mutex_unlock(&us_mutex);
     pthread_join(us_ptid, NULL);  /* joinable, the thread does not detach itself */
-    USBDBG(stdout, "[USBSID] Thread joined\r\n");
+    USBDBG(stdout, "[USBSID] Thread joined\n");
     threaded = withcycles = false;
     USBSID_DeInitRingBuffer(); /* after the join, the thread reads the ring until it exits */
     while (us_thread > 0) {};
@@ -1086,7 +1086,7 @@ int USBSID_Class::USBSID_IsRunning(void)
 void USBSID_Class::USBSID_RestartThread(bool with_cycles)
 {
   if (!us_PortIsOpen) return;
-  USBDBG(stdout, "[USBSID] Restart thread (%d)\r\n", USBSID_IsRunning());
+  USBDBG(stdout, "[USBSID] Restart thread (%d)\n", USBSID_IsRunning());
   /* First check if not already running */
   USBSID_StopThread();
   /* Stop any active transfers */
@@ -1109,7 +1109,7 @@ void USBSID_Class::USBSID_RestartThread(bool with_cycles)
 void USBSID_Class::USBSID_EnableThread(void)
 {
   if (!us_PortIsOpen) return;
-  USBDBG(stdout, "[USBSID] Enable thread (%d)\r\n", USBSID_IsRunning());
+  USBDBG(stdout, "[USBSID] Enable thread (%d)\n", USBSID_IsRunning());
   if (USBSID_IsRunning() != 1) {
     USBSID_InitThread();
   }
@@ -1119,7 +1119,7 @@ void USBSID_Class::USBSID_EnableThread(void)
 void USBSID_Class::USBSID_DisableThread(void)
 {
   if (!us_PortIsOpen) return;
-  USBDBG(stdout, "[USBSID] Disable thread (%d)\r\n", USBSID_IsRunning());
+  USBDBG(stdout, "[USBSID] Disable thread (%d)\n", USBSID_IsRunning());
   USBSID_StopThread();
   return;
 }
@@ -1472,13 +1472,13 @@ uint_fast64_t USBSID_Class::USBSID_WaitForCycle(uint_fast16_t cycles)
 
 int USBSID_Class::LIBUSB_OpenDevice(void)
 {
-  USBDBG(stdout, "[USBSID] Open device\r\n");
+  USBDBG(stdout, "[USBSID] Open device\n");
   /* Count the devices in the device list */
   struct libusb_device **devs;
   ssize_t cnt = libusb_get_device_list(ctx, &devs);
   if (cnt < 0) {
     rc = (int)cnt;
-    USBERR(stderr, "[USBSID] Error listing USB devices: %d %s: %s\r\n",
+    USBERR(stderr, "[USBSID] Error listing USB devices: %d %s: %s\n",
       rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
     return rc;
   }
@@ -1539,7 +1539,7 @@ int USBSID_Class::LIBUSB_OpenDevice(void)
   /* Validation */
   if (!target) {
     rc = -1;
-    USBERR(stderr, "[USBSID] Error, no matching USBSID-Pico found (serial='%s' index=%d): %d\r\n",
+    USBERR(stderr, "[USBSID] Error, no matching USBSID-Pico found (serial='%s' index=%d): %d\n",
       want_serial.empty() ? "<any>" : want_serial.c_str(), want_index, rc);
     libusb_free_device_list(devs, 1);
     return rc;
@@ -1549,7 +1549,7 @@ int USBSID_Class::LIBUSB_OpenDevice(void)
   if (!devh) {
     rc = libusb_open(target, &devh);
     if (rc < 0 || !devh) {
-      USBERR(stderr, "[USBSID] Error opening USB device: %d %s: %s\r\n",
+      USBERR(stderr, "[USBSID] Error opening USB device: %d %s: %s\n",
         rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
       libusb_free_device_list(devs, 1);
       return rc;
@@ -1576,7 +1576,7 @@ int USBSID_Class::LIBUSB_OpenDevice(void)
   if (rc == LIBUSB_ERROR_NOT_SUPPORTED) {
     rc = 0;
   } else if (rc < 0) {
-    USBERR(stderr, "[USBSID] Error setting auto detach kernel driver: %d %s: %s\r\n",
+    USBERR(stderr, "[USBSID] Error setting auto detach kernel driver: %d %s: %s\n",
       rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
   }
   return rc;
@@ -1584,7 +1584,7 @@ int USBSID_Class::LIBUSB_OpenDevice(void)
 
 void USBSID_Class::LIBUSB_CloseDevice(void)
 {
-  USBDBG(stdout, "[USBSID] Close device\r\n");
+  USBDBG(stdout, "[USBSID] Close device\n");
   if (devh) {
 #ifdef USE_VENDOR_ITF
     /* e.g. macOS needs Vendor interface 4, others may stay with 0, 1 */
@@ -1636,7 +1636,7 @@ out:
 
 int USBSID_Class::LIBUSB_DetachKernelDriver(void)
 {
-  USBDBG(stdout, "[USBSID] Detach kernel driver\r\n");
+  USBDBG(stdout, "[USBSID] Detach kernel driver\n");
   /* USBSID-Pico acts as a CDC-ACM device and on Linux it's
    * highly probable that the OS already attached the cdc-acm
    * driver the moment it got plugged in.
@@ -1660,7 +1660,7 @@ int USBSID_Class::LIBUSB_DetachKernelDriver(void)
     }
     rc = libusb_claim_interface(devh, if_num);
     if (rc < 0) {
-      USBERR(stderr, "[USBSID] Error claiming interface: %d, %s: %s\r\n",
+      USBERR(stderr, "[USBSID] Error claiming interface: %d, %s: %s\n",
         rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
       rc = -1;
       break;
@@ -1671,17 +1671,17 @@ int USBSID_Class::LIBUSB_DetachKernelDriver(void)
 
 int USBSID_Class::LIBUSB_ConfigureDevice(void)
 {
-  USBDBG(stdout, "[USBSID] Configure device\r\n");
+  USBDBG(stdout, "[USBSID] Configure device\n");
 #ifdef USE_VENDOR_ITF
     /* again macOS needs this */
     rc = libusb_set_interface_alt_setting(devh, 4, 0);
     if (rc < 0) {  /* not fatal, report only */
-      USBERR(stderr, "[USBSID] Error setting alt setting 0 on interface 4: %d, %s: %s\r\n",
+      USBERR(stderr, "[USBSID] Error setting alt setting 0 on interface 4: %d, %s: %s\n",
         rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
     }
     rc = libusb_control_transfer(devh, 0x21, 0x22, 0x01, 4, NULL, 0, 1000);
     if (rc < 0) {  /* should return 0 or higher */
-      USBERR(stderr, "[USBSID] Error configuring line state on interface 4 during control transfer: %d, %s: %s\r\n",
+      USBERR(stderr, "[USBSID] Error configuring line state on interface 4 during control transfer: %d, %s: %s\n",
         rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
       rc = -1;
       return rc;
@@ -1691,7 +1691,7 @@ int USBSID_Class::LIBUSB_ConfigureDevice(void)
    * set line state */
   rc = libusb_control_transfer(devh, 0x21, 0x22, ACM_CTRL_DTR | ACM_CTRL_RTS, 0, NULL, 0, 0);
   if (rc < 0) {  /* should return 0 or higher */
-    USBERR(stderr, "[USBSID] Error configuring line state during control transfer: %d, %s: %s\r\n",
+    USBERR(stderr, "[USBSID] Error configuring line state during control transfer: %d, %s: %s\n",
       rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
     rc = -1;
     return rc;
@@ -1700,7 +1700,7 @@ int USBSID_Class::LIBUSB_ConfigureDevice(void)
   /* set line encoding here, required but not used for CDC */
   rc = libusb_control_transfer(devh, 0x21, 0x20, 0, 0, encoding, sizeof(encoding), 1000);
   if (rc < 0 || rc != 7) {  /* should return 7 for the encoding size */
-    USBERR(stderr, "[USBSID] Error configuring line encoding during control transfer: %d, %s: %s\r\n",
+    USBERR(stderr, "[USBSID] Error configuring line encoding during control transfer: %d, %s: %s\n",
       rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
     rc = -1;
     return rc;
@@ -1769,19 +1769,19 @@ void USBSID_Class::LIBUSB_CheckLost(int error)
 
 void USBSID_Class::LIBUSB_InitOutBuffer(void)
 {
-  USBDBG(stdout, "[USBSID] Init out buffers\r\n");
+  USBDBG(stdout, "[USBSID] Init out buffers\n");
   out_buffer = libusb_dev_mem_alloc(devh, len_out_buffer);
   if (out_buffer == NULL) {
-    USBDBG(stdout, "[USBSID] libusb_dev_mem_alloc failed on out_buffer, allocating with malloc\r\n");
+    USBDBG(stdout, "[USBSID] libusb_dev_mem_alloc failed on out_buffer, allocating with malloc\n");
     out_buffer = us_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * len_out_buffer);
   } else {
     out_buffer_dma = true;
   }
-  USBDBG(stdout, "[USBSID] Alloc out_buffer complete\r\n");
+  USBDBG(stdout, "[USBSID] Alloc out_buffer complete\n");
   transfer_out = libusb_alloc_transfer(0);
-  USBDBG(stdout, "[USBSID] Alloc transfer_out complete\r\n");
+  USBDBG(stdout, "[USBSID] Alloc transfer_out complete\n");
   libusb_fill_bulk_transfer(transfer_out, devh, EP_OUT_ADDR, out_buffer, len_out_buffer, usb_out, this, LIBUSB_TIMEOUT);
-  USBDBG(stdout, "[USBSID] libusb_fill_bulk_transfer transfer_out complete\r\n");
+  USBDBG(stdout, "[USBSID] libusb_fill_bulk_transfer transfer_out complete\n");
 
   if (thread_buffer == NULL) {
     thread_buffer = us_alloc(2 * len_out_buffer, (sizeof(uint8_t)) * (len_out_buffer));
@@ -1794,7 +1794,7 @@ void USBSID_Class::LIBUSB_InitOutBuffer(void)
 
 void USBSID_Class::LIBUSB_FreeOutBuffer(void)
 {
-  USBDBG(stdout, "[USBSID] Free out buffers\r\n");
+  USBDBG(stdout, "[USBSID] Free out buffers\n");
   if (out_buffer_dma) {
     rc = libusb_dev_mem_free(devh, out_buffer, len_out_buffer);
     if (rc < 0) {
@@ -1818,19 +1818,19 @@ void USBSID_Class::LIBUSB_FreeOutBuffer(void)
 
 void USBSID_Class::LIBUSB_InitInBuffer(void)
 {
-  USBDBG(stdout, "[USBSID] Init in buffers\r\n");
+  USBDBG(stdout, "[USBSID] Init in buffers\n");
   in_buffer = libusb_dev_mem_alloc(devh, LEN_IN_XFER);
   if (in_buffer == NULL) {
-    USBDBG(stdout, "[USBSID] libusb_dev_mem_alloc failed on in_buffer, allocating with malloc\r\n");
+    USBDBG(stdout, "[USBSID] libusb_dev_mem_alloc failed on in_buffer, allocating with malloc\n");
     in_buffer = us_alloc(2 * LEN_IN_XFER, (sizeof(uint8_t)) * LEN_IN_XFER);
   } else {
     in_buffer_dma = true;
   }
-  USBDBG(stdout, "[USBSID] Alloc in_buffer complete\r\n");
+  USBDBG(stdout, "[USBSID] Alloc in_buffer complete\n");
   transfer_in = libusb_alloc_transfer(0);
-  USBDBG(stdout, "[USBSID] Alloc transfer_in complete\r\n");
+  USBDBG(stdout, "[USBSID] Alloc transfer_in complete\n");
   libusb_fill_bulk_transfer(transfer_in, devh, EP_IN_ADDR, in_buffer, LEN_IN_XFER, usb_in, this, LIBUSB_TIMEOUT);
-  USBDBG(stdout, "[USBSID] libusb_fill_bulk_transfer transfer_in complete\r\n");
+  USBDBG(stdout, "[USBSID] libusb_fill_bulk_transfer transfer_in complete\n");
 
   if (result == NULL) {
     result = us_alloc(2 * LEN_IN_BUFFER, (sizeof(uint8_t)) * (LEN_IN_BUFFER));
@@ -1840,7 +1840,7 @@ void USBSID_Class::LIBUSB_InitInBuffer(void)
 
 void USBSID_Class::LIBUSB_FreeInBuffer(void)
 {
-  USBDBG(stdout, "[USBSID] Free in buffers\r\n");
+  USBDBG(stdout, "[USBSID] Free in buffers\n");
   if (in_buffer_dma) {
     rc = libusb_dev_mem_free(devh, in_buffer, LEN_IN_XFER);
     if (rc < 0) {
@@ -1859,7 +1859,7 @@ void USBSID_Class::LIBUSB_FreeInBuffer(void)
 
 void USBSID_Class::LIBUSB_StopTransfers(void)
 {
-  USBDBG(stdout, "[USBSID] Stopping transfers\r\n");
+  USBDBG(stdout, "[USBSID] Stopping transfers\n");
 
   /* Cancel regardless of the pending flags: libusb knows whether a transfer
    * is in flight, 0 means it was and its callback is still due */
@@ -1928,7 +1928,7 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
   /* For LIBUSB version 1.0.27+ we could use this: */
   // rc = libusb_init_context(&ctx, /*options=NULL, /*num_options=*/0);
   if (rc != 0) {
-    USBERR(stderr, "[USBSID] Error initializing libusb: %d %s: %s\r\n",
+    USBERR(stderr, "[USBSID] Error initializing libusb: %d %s: %s\n",
       rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
     goto out;
   }
@@ -1958,7 +1958,7 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
   LIBUSB_InitInBuffer();
 
   if (rc < 0) {
-    USBERR(stderr, "[USBSID] Error, could not open device: %d, %s: %s\r\n",
+    USBERR(stderr, "[USBSID] Error, could not open device: %d, %s: %s\n",
       rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
     goto out;
   }
@@ -1997,7 +1997,7 @@ int USBSID_Class::LIBUSB_Exit(void)
   ctx = NULL;
   rc = -1;
   devh = NULL;
-  USBDBG(stdout, "[USBSID] Closed USB device\r\n");
+  USBDBG(stdout, "[USBSID] Closed USB device\n");
   return 0;
 }
 
@@ -2008,7 +2008,7 @@ void LIBUSB_CALL USBSID_Class::usb_out(struct libusb_transfer *transfer)
   if (transfer->status != LIBUSB_TRANSFER_COMPLETED) {
     if (self) self->rc = transfer->status;
     if (transfer->status != LIBUSB_TRANSFER_CANCELLED) {
-      USBERR(stderr, "[USBSID] Warning: transfer out interrupted with status %d, %s: %s\r",
+      USBERR(stderr, "[USBSID] Warning: transfer out interrupted with status %d, %s: %s\n",
         transfer->status, libusb_error_name(transfer->status), libusb_strerror((enum libusb_error)transfer->status));
     }
     const bool cancelled = transfer->status == LIBUSB_TRANSFER_CANCELLED;
@@ -2027,7 +2027,7 @@ void LIBUSB_CALL USBSID_Class::usb_out(struct libusb_transfer *transfer)
 
   if (self) self->out_failures = 0;
   if (self && transfer->actual_length != self->len_out_buffer) {
-    USBERR(stderr, "[USBSID] Sent data length %d is different from the defined buffer length: %d or actual length %d\r",
+    USBERR(stderr, "[USBSID] Sent data length %d is different from the defined buffer length: %d or actual length %d\n",
       transfer->length, self->len_out_buffer, transfer->actual_length);
   }
   if (self) self->transfer_out_pending = false;
@@ -2040,7 +2040,7 @@ void LIBUSB_CALL USBSID_Class::usb_in(struct libusb_transfer *transfer)
   if (transfer->status != LIBUSB_TRANSFER_COMPLETED) {
     if (self) self->rc = transfer->status;
     if (transfer->status != LIBUSB_TRANSFER_CANCELLED) {
-      USBERR(stderr, "[USBSID] Warning: transfer in interrupted with status '%s'\r",
+      USBERR(stderr, "[USBSID] Warning: transfer in interrupted with status '%s'\n",
         libusb_error_name(transfer->status));
       if (self && transfer->status == LIBUSB_TRANSFER_NO_DEVICE) {
         self->LIBUSB_CheckLost(LIBUSB_ERROR_NO_DEVICE);
