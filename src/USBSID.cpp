@@ -1917,6 +1917,7 @@ void USBSID_Class::LIBUSB_StopTransfers(void)
 int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
 {
   rc = read_completed = write_completed = -1;
+  features = -1;  /* Firmware may differ from the last open */
   device_lost = false;
   out_failures = 0;
   threaded = start_threaded;
