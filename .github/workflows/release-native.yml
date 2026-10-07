@@ -1,9 +1,9 @@
 name: C/C++ driver release
 
 # Tag v<version> (e.g. v1.0.0) releases the C/C++ driver: source archives
-# of src/ and libusbsiddrv-vice/, published only after every platform
-# build in build-native.yml passes. The Java driver has its own tags and
-# workflow, see release-java.yml.
+# of src/ and libusbsiddrv-vice/ (src sources plus the VICE build files),
+# published only after every platform build in build-native.yml passes.
+# The Java driver has its own tags and workflow, see release-java.yml.
 
 on:
   push:
@@ -56,7 +56,7 @@ jobs:
             echo "C/C++ driver source for USBSID-Pico."
             echo
             echo "- \`USBSID-Pico-driver-src-*\`: \`src/\`, C++ driver, C interface and multiboard manager"
-            echo "- \`USBSID-Pico-driver-vice-*\`: \`libusbsiddrv-vice/\`, the copy used by VICE"
+            echo "- \`USBSID-Pico-driver-vice-*\`: \`src/\` sources with the VICE build files from \`libusbsiddrv-vice/\`"
             echo
             echo "**Commits in this release:**"
             if [ -n "$PREV" ]; then

@@ -1,8 +1,9 @@
 name: C/C++ driver build
 
 # Build and test compile the C/C++ driver in src/ and libusbsiddrv-vice/ on
-# every platform. The build and the tests live in test/ci/build.sh, shared
-# with the GitLab pipeline. Also called by release-native.yml.
+# every platform. libusbsiddrv-vice/ gets its sources from src/, copied in by
+# test/ci/sync_vice.sh. The build and the tests live in test/ci/build.sh,
+# shared with the GitLab pipeline. Also called by release-native.yml.
 
 on:
   push:

@@ -5,8 +5,8 @@
 # Usage: test/ci/build.sh <src|vice>
 #
 #   src   driver-repo/src: C++ library, C interfaces, C++ and C API tests
-#   vice  driver-repo/libusbsiddrv-vice: same as src plus a test of the calls
-#         VICE makes
+#   vice  driver-repo/libusbsiddrv-vice: the src sources copied in by
+#         sync_vice.sh, same as src plus a test of the calls VICE makes
 #
 # Besides CXXSTDS every target gets one build without C++ exceptions, the way
 # VICE configure compiles C++ (-fno-exceptions), as C++11 (VICE's minimum
@@ -43,6 +43,7 @@ case "$TARGET" in
     NOEXC_STD="c++11"
     ;;
   vice)
+    bash "$TESTS/sync_vice.sh"
     SRC_DIR="$ROOT/libusbsiddrv-vice"
     WARN="-Wall -Wextra -Werror"
     C_TESTS="c_api_test.c vice_c_api_test.c"

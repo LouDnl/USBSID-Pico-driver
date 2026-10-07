@@ -120,7 +120,8 @@ default:
 # ============================================================================
 # C/C++ DRIVER (build-native.yml)
 # TARGET src:  driver-repo/src, C++ library + C interface + manager
-# TARGET vice: driver-repo/libusbsiddrv-vice, the copy used by VICE
+# TARGET vice: driver-repo/libusbsiddrv-vice, src sources copied in by
+#              test/ci/sync_vice.sh, plus the VICE build files
 # ============================================================================
 
 native:linux:
@@ -327,7 +328,7 @@ release:notes:native:
   variables:
     NOTES_TAG_GLOB: "v[0-9]*"
     NOTES_PATHS: "src libusbsiddrv-vice"
-    NOTES_HEADER: "C/C++ driver source for USBSID-Pico: src/ (C++ driver, C interface, multiboard manager) and libusbsiddrv-vice/ (the copy used by VICE)."
+    NOTES_HEADER: "C/C++ driver source for USBSID-Pico: src/ (C++ driver, C interface, multiboard manager) and libusbsiddrv-vice/ (the src sources with the VICE build files)."
 
 release:notes:java:
   extends:

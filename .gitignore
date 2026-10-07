@@ -56,6 +56,11 @@
 !javascript/webusb-jsSID-worker_driver/*
 !libusbsiddrv-vice
 !libusbsiddrv-vice/*
+# Copied in from src/ and the root by test/ci/sync_vice.sh
+libusbsiddrv-vice/*.cpp
+libusbsiddrv-vice/*.h
+libusbsiddrv-vice/README.md
+libusbsiddrv-vice/LICENSE
 !webusb
 !webusb/*
 

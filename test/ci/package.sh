@@ -5,7 +5,8 @@
 # Usage: test/ci/package.sh <native|java> <version> <out_dir>
 #
 #   native  source archives (.tar.gz and .zip) of src/ and libusbsiddrv-vice/,
-#           each with LICENSE, README.md and a VERSION file
+#           each with LICENSE, README.md and a VERSION file. The VICE archive
+#           gets the src sources, copied in by sync_vice.sh
 #   java    the built driver JAR and its dependency reduced POM, run after
 #           `mvn package` in java/usbsid-usb-driver-library-java
 #
@@ -35,6 +36,7 @@ sha256() {
 
 case "$KIND" in
   native)
+    bash "$ROOT/test/ci/sync_vice.sh"
     STAGE="$(mktemp -d)"
     FILES=""
     for PART in src libusbsiddrv-vice; do
@@ -44,7 +46,8 @@ case "$KIND" in
       esac
       mkdir -p "$STAGE/$NAME"
       cp "$ROOT/$PART"/*.cpp "$ROOT/$PART"/*.h "$STAGE/$NAME/"
-      # The VICE copy ships its own LICENSE, README.md and Makefile.am
+      # libusbsiddrv-vice adds Makefile.am, LICENSE and README.md come from
+      # the root (copied into libusbsiddrv-vice by sync_vice.sh)
       for F in LICENSE README.md Makefile.am; do
         if [ -f "$ROOT/$PART/$F" ]; then
           cp "$ROOT/$PART/$F" "$STAGE/$NAME/"
