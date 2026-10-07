@@ -82,6 +82,8 @@ int main(void)
     const uint8_t items[4] = {0x18, 0x0F, 0x00, 0x08};
     mgr.WriteRingCycledN(0, items, 1);
     check(mgr.RingFreeBytes(0) == 0, "mgr ringfree unknown sid");
+    check(!mgr.AnyBoardLost(), "mgr anyboardlost without boards");
+    check(!mgr.BoardLost(0), "mgr boardlost unknown board");
     mgr.FlushBoard(-1);
     mgr.SetMutedAll(true);
     mgr.SetMutedAll(false);

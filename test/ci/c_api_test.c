@@ -43,6 +43,7 @@ int main(void)
   check(!initialised_USBSID(NULL), "initialised NULL");
   check(!available_USBSID(NULL), "available NULL");
   check(!portisopen_USBSID(NULL), "portisopen NULL");
+  check(!devicelost_USBSID(NULL), "devicelost NULL");
   check(getrefreshrate_USBSID(NULL) == 0, "refreshrate NULL");
   check(getrasterrate_USBSID(NULL) == 0, "rasterrate NULL");
   check(getserial_USBSID(NULL, serial, sizeof serial) == -1, "getserial NULL");
@@ -71,6 +72,7 @@ int main(void)
   check(us != NULL, "create");
   check(initialised_USBSID(us), "initialised");
   check(!portisopen_USBSID(us), "not open");
+  check(!devicelost_USBSID(us), "not lost without connection");
   check(getrefreshrate_USBSID(us) > 0, "refreshrate");
   check(getrasterrate_USBSID(us) > 0, "rasterrate");
   check(getclockrate_USBSID(us) == 0, "clockrate without connection");
@@ -111,6 +113,8 @@ int main(void)
   check(totalsids_USBSIDMgr(NULL) == 0, "totalsids NULL");
   close_USBSIDMgr(NULL);
   check(ringfreebytes_USBSIDMgr(NULL, 0) == 0, "ringfreebytes NULL");
+  check(!anyboardlost_USBSIDMgr(NULL), "anyboardlost NULL");
+  check(!boardlost_USBSIDMgr(NULL, 0), "boardlost NULL");
   writeringcycledn_USBSIDMgr(NULL, 0, items, 1);
   flushboard_USBSIDMgr(NULL, 0);
   setmutedall_USBSIDMgr(NULL, true);
@@ -129,6 +133,8 @@ int main(void)
   check(read_USBSIDMgr(mgr, 0, 0x1B) == 0, "mgr read");
   writeringcycledn_USBSIDMgr(mgr, 0, items, 1);
   check(ringfreebytes_USBSIDMgr(mgr, 0) == 0, "mgr ringfreebytes unknown sid");
+  check(!anyboardlost_USBSIDMgr(mgr), "mgr anyboardlost without boards");
+  check(!boardlost_USBSIDMgr(mgr, 0), "mgr boardlost unknown board");
   flushboard_USBSIDMgr(mgr, -1);
   setmutedall_USBSIDMgr(mgr, true);
   setmutedall_USBSIDMgr(mgr, false);
