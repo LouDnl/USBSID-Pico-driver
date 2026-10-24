@@ -436,9 +436,11 @@ const webusb_min_version = "0.2.3";
         })
         .then(() => {
           var interfaces = this.device_.configuration.interfaces;
+          var found = false;  /* first vendor (0xFF) interface is the WebUSB command interface */
           interfaces.forEach(element => {
             element.alternates.forEach(elementalt => {
-              if (elementalt.interfaceClass == 0xFF) {
+              if (!found && elementalt.interfaceClass == 0xFF) {
+                found = true;
                 this.interfaceNumber = element.interfaceNumber;
                 elementalt.endpoints.forEach(elementendpoint => {
                   if (elementendpoint.direction == "out") {

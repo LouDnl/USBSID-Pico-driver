@@ -56,9 +56,11 @@ function _debug_worker(...message)
 
 async function webusb_findinterface(connectType) {
   self.interfaces = self.device.configuration.interfaces;
+  let found = false;  // first vendor (0xFF) interface is the WebUSB command interface
   self.interfaces.forEach((element) => {
     element.alternates.forEach((elementalt) => {
-      if (elementalt.interfaceClass == connectType) {
+      if (!found && elementalt.interfaceClass == connectType) {
+        found = true;
         self.device.interfaceNumber = element.interfaceNumber;
         elementalt.endpoints.forEach((elementendpoint) => {
           if (elementendpoint.direction == "out") {
