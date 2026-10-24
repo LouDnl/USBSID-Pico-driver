@@ -35,6 +35,7 @@
 !src/**
 !test
 !test/build
+!test/bench
 !test/ci
 !test/ci/**
 !java

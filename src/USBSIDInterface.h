@@ -59,7 +59,31 @@ extern "C" {
   #define USBSID_FEATURE_RGBVU    0x04
   #define USBSID_FEATURE_NET      0x10
   #define USBSID_FEATURE_NSD      0x20
+  #define USBSID_FEATURE_SIDSTREAM 0x40  /* SID stream interface (USB interface 7) built in */
   #define USBSID_FEATURE_EMULATOR 0x80
+
+  /* Firmware version integer from which readmulti_USBSID() uses a batch READ, no feature bit */
+  #define USBSID_FW_VERSION_BATCH_READ 81
+
+#ifdef USBSID_SID_STREAM
+  /* SID stream, see streamstart_USBSID() */
+  #define USBSID_STREAM_INFO_LEN       16
+  #define USBSID_STREAM_FLAG_DEFERRED  0x20  /* Built late, mirror only */
+  #define USBSID_STREAM_FLAG_OTHER     0x40  /* Bus owned by a non USB owner */
+
+  /* Latest stream frame of one SID as returned by getstreamstate_USBSID() */
+  typedef struct {
+    uint32_t frames;     /* Frames received since the stream started, 0: no data */
+    uint16_t tick;       /* Firmware tick sequence */
+    uint8_t flags;       /* USBSID_STREAM_FLAG_* bits */
+    uint32_t cycles;     /* PHI1 cycle counter of the snapshot */
+    uint32_t processed;  /* Main interface packets the firmware processed */
+  } USBSIDstreamstate;
+
+  /* Raw frame callback, runs in the stream event thread: no USB I/O on the
+   * same board from inside it */
+  typedef void (*USBSIDstreamcb)(const uint8_t *frame, int len, void *user);
+#endif /* USBSID_SID_STREAM */
 
   /* Attached board info as returned by enumerate_USBSID() */
   typedef struct {
@@ -152,6 +176,20 @@ extern "C" {
   /* Synchronous direct */
   void writesingle_USBSID(USBSIDitf, unsigned char *buff, size_t len);
   unsigned char readsingle_USBSID(USBSIDitf, uint8_t reg);
+  int readmulti_USBSID(USBSIDitf, const uint8_t *regs, uint8_t *out, int n);  /* n (1-63) registers, one round trip, n or -1 */
+
+#ifdef USBSID_SID_STREAM
+  /* SID stream (firmware with USBSID_FEATURE_SIDSTREAM), threaded and unthreaded */
+  /* rate 50/60/250/500/1000 Hz or 0 (50), sid_mask 0 = all; 0 or -1 */
+  int streamstart_USBSID(USBSIDitf, int rate_hz, uint8_t sid_mask);
+  int streamstop_USBSID(USBSIDitf);                                   /* 0, -1 for NULL */
+  bool streamrunning_USBSID(USBSIDitf);
+  int streamquery_USBSID(USBSIDitf, uint8_t *info);                  /* USBSID_STREAM_INFO_LEN bytes, 0 or -1 */
+  int readcached_USBSID(USBSIDitf, uint8_t reg);                      /* 0-255, -1 without data for that SID */
+  int getsidmemory_USBSID(USBSIDitf, uint8_t *out);                   /* 128 bytes, mask of SIDs with data or -1 */
+  bool getstreamstate_USBSID(USBSIDitf, int sid, USBSIDstreamstate *state);
+  void setstreamcallback_USBSID(USBSIDitf, USBSIDstreamcb cb, void *user);
+#endif /* USBSID_SID_STREAM */
 
   /* Command channel, synchronous, use with the thread disabled */
   /**
@@ -184,6 +222,12 @@ extern "C" {
    * @return: bitmask, -1 on failure
    */
   int getfeatures_USBSID(USBSIDitf);
+  /**
+   * @brief: Read the firmware version integer (81 = 0.8.1, 100 = 1.0.0), cached.
+   *
+   * @return: version integer, -1 on failure
+   */
+  int getfirmwareversionint_USBSID(USBSIDitf);
   /* Onboard emulator, firmware with ONBOARD_EMULATOR=1 */
   /**
    * @brief: Upload a tune file to the onboard emulator.

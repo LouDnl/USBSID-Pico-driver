@@ -117,6 +117,11 @@ class USBSID_Manager {
     int TotalSIDs(void) const { return (int)logical_map_.size(); }
     int BoardCount(void) const { return (int)boards_.size(); }
     const std::vector<BoardInfo> & Boards(void) const { return boards_; }
+
+    /** @brief Integer firmware version of a board e.g. 81 (0.8.1), 100 (1.0.0).
+     * Returns USBSID_GetFirmwareVersionInt() of that board's device (read once,
+     * cached in USBSID_Class; OpenAll() pre-reads it), -1 for an invalid board or unknown. */
+    int FirmwareVersionInt(int board) const;
     const std::vector<LogicalSlot> & LogicalMap(void) const { return logical_map_; }
 
     /** @brief Borrow an open board for direct calls (command channel), nullptr when out of range. */
@@ -130,6 +135,20 @@ class USBSID_Manager {
     void WriteRing(int logical_sid, uint8_t reg, uint8_t val);
     void WriteRingCycled(int logical_sid, uint8_t reg, uint8_t val, uint16_t cycles);
     unsigned char Read(int logical_sid, uint8_t reg);
+    /* n (1-63) board local registers in one round trip, returns n or -1 */
+    int ReadMulti(int logical_sid, const uint8_t *regs, uint8_t *out, int n);
+
+#ifdef USBSID_SID_STREAM
+    /* SID stream on every open board, see USBSID_StreamStart().
+     * rate 0 = firmware default, all configured SIDs of each board.
+     * Returns the number of boards streaming, boards without the stream
+     * interface are skipped */
+    int StreamStartAll(int rate_hz);
+    void StreamStopAll(void);
+    /* Last streamed value of a board local register of the board owning
+     * `logical_sid`, no USB traffic, -1 without stream data */
+    int ReadCached(int logical_sid, uint8_t reg);
+#endif /* USBSID_SID_STREAM */
 
     /* `count` x (reg, val, cycles hi, cycles lo) to the board owning
      * `logical_sid` in one lock, regs already board local */

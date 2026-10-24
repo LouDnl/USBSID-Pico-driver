@@ -101,6 +101,10 @@ extern "C"
     memcpy(out->socketconfig, b.socketconfig, USBSID_SOCKETCONFIG_LEN);
     return true;
   };
+  int getfirmwareversionint_USBSIDMgr(USBSIDmgr m, int board){
+    if( m == NULL ) return -1;
+    return ((USBSID_Manager*) m)->FirmwareVersionInt(board);
+  };
   bool getlogicalslot_USBSIDMgr(USBSIDmgr m, int logical_sid, USBSIDlogicalslot *out){
     if( m == NULL || out == NULL ) return false;
     const std::vector<USBSID_Manager::LogicalSlot> &map = ((USBSID_Manager*) m)->LogicalMap();
@@ -126,6 +130,24 @@ extern "C"
     if( m == NULL ) return 0;
     return ((USBSID_Manager*) m)->Read(logical_sid, reg);
   };
+  int readmulti_USBSIDMgr(USBSIDmgr m, int logical_sid, const uint8_t *regs, uint8_t *out, int n){
+    if( m == NULL ) return -1;
+    return ((USBSID_Manager*) m)->ReadMulti(logical_sid, regs, out, n);
+  };
+#ifdef USBSID_SID_STREAM
+  int streamstartall_USBSIDMgr(USBSIDmgr m, int rate_hz){
+    if( m == NULL ) return 0;
+    return ((USBSID_Manager*) m)->StreamStartAll(rate_hz);
+  };
+  void streamstopall_USBSIDMgr(USBSIDmgr m){
+    if( m == NULL ) return;
+    ((USBSID_Manager*) m)->StreamStopAll();
+  };
+  int readcached_USBSIDMgr(USBSIDmgr m, int logical_sid, uint8_t reg){
+    if( m == NULL ) return -1;
+    return ((USBSID_Manager*) m)->ReadCached(logical_sid, reg);
+  };
+#endif /* USBSID_SID_STREAM */
   void writeringcycledn_USBSIDMgr(USBSIDmgr m, int logical_sid, const uint8_t *items, int count){
     if( m == NULL ) return;
     return ((USBSID_Manager*) m)->WriteRingCycledN(logical_sid, items, count);

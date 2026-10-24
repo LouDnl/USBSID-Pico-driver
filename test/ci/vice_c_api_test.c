@@ -46,6 +46,11 @@ int main(void)
   check(getnumsids_USBSID(us) == 0, "numsids without connection");
   check(readsingle_USBSID(us, 0x1B) == 0, "readsingle without connection");
   check(read_USBSID(us, 0x1B) == 0, "read without connection");
+#ifdef USBSID_SID_STREAM
+  check(streamstart_USBSID(us, 1000, 0) == -1, "streamstart without connection");
+  check(readcached_USBSID(us, 0x1B) == -1, "readcached without stream");
+  check(streamstop_USBSID(us) == 0, "streamstop without stream");
+#endif /* USBSID_SID_STREAM */
   check(waitforcycle_USBSID(us, 1000) > 0, "waitforcycle");
   pause_USBSID(us);
   mute_USBSID(us);

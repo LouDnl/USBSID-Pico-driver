@@ -251,6 +251,51 @@ extern "C"
     if( p == NULL ) return 0;
     return ((USBSID_Class*)p)->USBSID_SingleRead(reg);
   };
+  int readmulti_USBSID(USBSIDitf p, const uint8_t *regs, uint8_t *out, int n){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_ReadMulti(regs, out, n);
+  };
+#ifdef USBSID_SID_STREAM
+  int streamstart_USBSID(USBSIDitf p, int rate_hz, uint8_t sid_mask){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_StreamStart(rate_hz, sid_mask);
+  };
+  int streamstop_USBSID(USBSIDitf p){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_StreamStop();
+  };
+  bool streamrunning_USBSID(USBSIDitf p){
+    if( p == NULL ) return false;
+    return ((USBSID_Class*)p)->USBSID_StreamRunning();
+  };
+  int streamquery_USBSID(USBSIDitf p, uint8_t *info){
+    if( p == NULL || info == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_StreamQuery(info);
+  };
+  int readcached_USBSID(USBSIDitf p, uint8_t reg){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_ReadCached(reg);
+  };
+  int getsidmemory_USBSID(USBSIDitf p, uint8_t *out){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_GetSidMemory(out);
+  };
+  bool getstreamstate_USBSID(USBSIDitf p, int sid, USBSIDstreamstate *state){
+    if( p == NULL || state == NULL ) return false;
+    USBSID_StreamState st;
+    if (!((USBSID_Class*)p)->USBSID_GetStreamState(sid, &st)) return false;
+    state->frames = st.frames;
+    state->tick = st.tick;
+    state->flags = st.flags;
+    state->cycles = st.cycles;
+    state->processed = st.processed;
+    return true;
+  };
+  void setstreamcallback_USBSID(USBSIDitf p, USBSIDstreamcb cb, void *user){
+    if( p == NULL ) return;
+    ((USBSID_Class*)p)->USBSID_SetStreamCallback(cb, user);
+  };
+#endif /* USBSID_SID_STREAM */
   void setpassive_USBSID(USBSIDitf p, bool on){
     if( p == NULL ) return;
     ((USBSID_Class*)p)->USBSID_SetPassive(on);
@@ -270,6 +315,10 @@ extern "C"
   int getfeatures_USBSID(USBSIDitf p){
     if( p == NULL ) return -1;
     return ((USBSID_Class*)p)->USBSID_GetFeatures();
+  };
+  int getfirmwareversionint_USBSID(USBSIDitf p){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_GetFirmwareVersionInt();
   };
   int uploadtune_USBSID(USBSIDitf p, const uint8_t *data, size_t len, uint8_t filetype){
     if( p == NULL ) return -1;

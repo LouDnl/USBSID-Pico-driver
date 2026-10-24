@@ -75,6 +75,7 @@ bool USBSID_Manager::OpenAll(
     info.numsids = dev->USBSID_GetNumSIDs();
     info.fmoplsid = dev->USBSID_GetFMOplSID();
     info.pcbversion = dev->USBSID_GetPCBVersion();
+    (void)dev->USBSID_GetFirmwareVersionInt();  /* one-time read at open, cached in the device, avoids a read during playback */
 
     uint8_t cfg[SOCKET_BUFFER_SIZE];
     info.socketconfig_valid = (dev->USBSID_GetSocketConfig(cfg) != nullptr);
@@ -158,6 +159,12 @@ void USBSID_Manager::BuildLogicalMap(void)
   }
 }
 
+int USBSID_Manager::FirmwareVersionInt(int board) const
+{
+  if (board < 0 || board >= (int)devices_.size() || !devices_[board]) return -1;
+  return devices_[board]->USBSID_GetFirmwareVersionInt();
+}
+
 void USBSID_Manager::CloseAll(void)
 {
   devices_.clear();  /* ~USBSID_Class() closes each board's connection */
@@ -192,6 +199,34 @@ unsigned char USBSID_Manager::Read(int logical_sid, uint8_t reg)
   if (logical_sid < 0 || (size_t)logical_sid >= logical_map_.size()) return 0;
   return devices_[logical_map_[logical_sid].board_index]->USBSID_Read(reg);
 }
+
+int USBSID_Manager::ReadMulti(int logical_sid, const uint8_t *regs, uint8_t *out, int n)
+{
+  if (logical_sid < 0 || (size_t)logical_sid >= logical_map_.size()) return -1;
+  return devices_[logical_map_[logical_sid].board_index]->USBSID_ReadMulti(regs, out, n);
+}
+
+#ifdef USBSID_SID_STREAM
+int USBSID_Manager::StreamStartAll(int rate_hz)
+{
+  int started = 0;
+  for (auto & dev : devices_) {
+    if (dev->USBSID_StreamStart(rate_hz, 0) == 0) started++;
+  }
+  return started;
+}
+
+void USBSID_Manager::StreamStopAll(void)
+{
+  for (auto & dev : devices_) dev->USBSID_StreamStop();
+}
+
+int USBSID_Manager::ReadCached(int logical_sid, uint8_t reg)
+{
+  if (logical_sid < 0 || (size_t)logical_sid >= logical_map_.size()) return -1;
+  return devices_[logical_map_[logical_sid].board_index]->USBSID_ReadCached(reg);
+}
+#endif /* USBSID_SID_STREAM */
 
 void USBSID_Manager::WriteRingCycledN(int logical_sid, const uint8_t *items, int count)
 {

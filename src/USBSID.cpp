@@ -123,6 +123,9 @@ USBSID_Class::~USBSID_Class()
   /* Destroy here, a thread restart after StopThread() locks it again */
   pthread_mutex_destroy(&us_mutex);
   pthread_cond_destroy(&us_cond);
+#ifdef USBSID_SID_STREAM
+  pthread_mutex_destroy(&stream_cb_mutex);
+#endif /* USBSID_SID_STREAM */
 }
 
 int USBSID_Class::USBSID_Init(bool start_threaded, bool with_cycles)
@@ -546,6 +549,50 @@ unsigned char USBSID_Class::USBSID_SingleRead(uint8_t reg)
   return result[0];
 }
 
+/**
+ * @brief: Read n registers in one round trip (batch READ, byte count n)
+ *
+ * @note Firmware reads the registers back to back in the given order.
+ *       Not ordered with ringbuffer writes queued by the driver thread.
+ * @note Firmware older than US_FW_VERSION_BATCH_READ gets n x USBSID_SingleRead().
+ *       A short reply falls back to USBSID_SingleRead() for the remainder.
+ *
+ * @param regs: n register addresses, SID local addressing as for SingleRead
+ * @param out: receives n values
+ * @param n: register count, 1-63
+ * @return: n, -1 on failure
+ */
+int USBSID_Class::USBSID_ReadMulti(const uint8_t *regs, uint8_t *out, int n)
+{
+  if (!us_PortIsOpen || regs == NULL || out == NULL) return -1;
+  if (n < 1 || n > (LEN_OUT_BUFFER - 1)) return -1;
+  const int fv = USBSID_GetFirmwareVersionInt();
+  if (fv < US_FW_VERSION_BATCH_READ) {  /* Firmware without batch read, or version unknown (-1) */
+    for (int i = 0; i < n; i++) out[i] = USBSID_SingleRead(regs[i]);
+    return n;
+  }
+  unsigned char buff[LEN_OUT_BUFFER];
+  buff[0] = (unsigned char)((READ << 6) | n);
+  memcpy(&buff[1], regs, (size_t)n);
+  int actual_length = 0;
+  rc = libusb_bulk_transfer(devh, EP_OUT_ADDR, buff, n + 1, &actual_length, LIBUSB_TIMEOUT);
+  if (rc < 0) {
+    USBERR(stderr, "[USBSID] Error while sending batch read command: %d, %s: %s\n",
+      rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
+    return -1;
+  }
+  rc = LIBUSB_ReadIn(out, (size_t)n, &actual_length);
+  if (rc < 0 || actual_length < 1) {
+    USBERR(stderr, "[USBSID] Error while reading batch read reply: %d, %s: %s\n",
+      rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
+    return -1;
+  }
+  for (int i = actual_length; i < n; i++) {  /* Short reply */
+    out[i] = USBSID_SingleRead(regs[i]);
+  }
+  return n;
+}
+
 unsigned char USBSID_Class::USBSID_SingleReadConfig(unsigned char *buff, size_t len)
 {
   if (!us_PortIsOpen) return 0;
@@ -653,6 +700,41 @@ int USBSID_Class::USBSID_GetFeatures(void)
   if (USBSID_ReadResponse(reply, 1) != 1) return -1;
   features = reply[0];
   return features;
+}
+
+/**
+ * @brief: Read the firmware version integer (e.g. 81 for 0.8.1), once per open.
+ *
+ * @note Sends USBSID_VERSION with byte 2 set, new firmware replies one byte, old firmware the 64 byte string reply.
+ *
+ * @return: version integer, -1 on failure
+ */
+int USBSID_Class::USBSID_GetFirmwareVersionInt(void)
+{
+  if (!us_PortIsOpen) return -1;
+  if (fwversion >= 0) return fwversion;
+  if (USBSID_SendConfig(USBSID_VERSION, 1, 0, 0, 0) < 0) return -1;
+  unsigned char reply[64] = {0};  /* Old firmware answers with the 64 byte version string reply */
+  const int got = USBSID_ReadResponse(reply, sizeof(reply));
+  if (got < 1) return -1;
+  /* Rule: reply byte 0 == 0x80 with byte 1 != 0 (or more than one byte) is the
+   * old string reply (byte 1 = string length), never a single byte integer
+   * version. Treat it as firmware older than US_FW_VERSION_BATCH_READ. The
+   * string "0.7.1" is parsed to 71 like the firmware CMake does (dots dropped,
+   * leading zeros stripped), 0 when it holds no digits. */
+  if (got > 1 || (reply[0] == USBSID_VERSION && reply[1] != 0)) {  /* reply[] is zeroed, so got == 1 reads reply[1] == 0 */
+    int v = 0;
+    const int slen = (got > 2) ? (reply[1] < got - 2 ? reply[1] : got - 2) : 0;
+    for (int i = 0; i < slen; i++) {
+      const unsigned char c = reply[2 + i];
+      if (c >= '0' && c <= '9') v = v * 10 + (c - '0');
+      else if (c != '.') break;  /* Stop at a suffix such as "-rc1" */
+    }
+    fwversion = (v < US_FW_VERSION_BATCH_READ) ? v : 0;  /* Never claim a new version from a string reply */
+    return fwversion;
+  }
+  fwversion = reply[0];
+  return fwversion;
 }
 
 /**
@@ -788,9 +870,25 @@ void USBSID_Class::USBSID_Write(unsigned char *buff, size_t len)
     return;
   }
   write_completed = 0;
+  while (transfer_out_pending) {  /* Previous packet in flight, e.g. after USBSID_Read() */
+    struct timeval tv = {0, 1000};
+    libusb_handle_events_timeout_completed(ctx, &tv, NULL);
+  }
   memcpy(out_buffer, buff, len);
-  libusb_submit_transfer(transfer_out);
-  libusb_handle_events_completed(ctx, NULL);
+  transfer_out_pending = true;
+  rc = libusb_submit_transfer(transfer_out);
+  if (rc < 0) {
+    transfer_out_pending = false;
+    USBERR(stderr, "[USBSID] submit OUT failed %d - %s: %s\n",
+      rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
+    LIBUSB_CheckLost(rc);
+    return;
+  }
+  /* Wait for this transfer, the stream event thread may handle its completion */
+  while (transfer_out_pending) {
+    struct timeval tv = {0, 1000};
+    libusb_handle_events_timeout_completed(ctx, &tv, NULL);
+  }
   return;
 }
 
@@ -820,9 +918,25 @@ void USBSID_Class::USBSID_Write(unsigned char *buff, size_t len, uint16_t cycles
   }
   USBSID_WaitForCycle(cycles);
   write_completed = 0;
+  while (transfer_out_pending) {  /* Previous packet in flight, e.g. after USBSID_Read() */
+    struct timeval tv = {0, 1000};
+    libusb_handle_events_timeout_completed(ctx, &tv, NULL);
+  }
   memcpy(out_buffer, buff, len);
-  libusb_submit_transfer(transfer_out);
-  libusb_handle_events_completed(ctx, NULL);
+  transfer_out_pending = true;
+  rc = libusb_submit_transfer(transfer_out);
+  if (rc < 0) {
+    transfer_out_pending = false;
+    USBERR(stderr, "[USBSID] submit OUT failed %d - %s: %s\n",
+      rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
+    LIBUSB_CheckLost(rc);
+    return;
+  }
+  /* Wait for this transfer, the stream event thread may handle its completion */
+  while (transfer_out_pending) {
+    struct timeval tv = {0, 1000};
+    libusb_handle_events_timeout_completed(ctx, &tv, NULL);
+  }
   return;
 }
 
@@ -863,7 +977,7 @@ void USBSID_Class::USBSID_WriteCycled(uint8_t reg, uint8_t val, uint16_t cycles)
 
 unsigned char USBSID_Class::USBSID_Read(uint8_t reg)
 {
-  if (!us_PortIsOpen) return 0;
+  if (!us_PortIsOpen || transfer_in == NULL || transfer_out == NULL) return 0;
   if (threaded == 0) {  /* Reading not supported with threaded writes */
     read_completed = write_completed = 0;
     *result = 0;
@@ -886,7 +1000,7 @@ unsigned char USBSID_Class::USBSID_Read(uint8_t reg)
     rc = libusb_submit_transfer(transfer_out);
     if (rc < 0) {
       transfer_out_pending = false;
-      libusb_cancel_transfer(transfer_in);
+      LIBUSB_CancelIn();
       USBERR(stderr, "[USBSID] submit OUT failed %d - %s: %s\n",
         rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
       return 0xFF;
@@ -906,7 +1020,7 @@ unsigned char USBSID_Class::USBSID_Read(uint8_t reg)
 
 unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff)
 {
-  if (!us_PortIsOpen) return 0;
+  if (!us_PortIsOpen || transfer_in == NULL || transfer_out == NULL) return 0;
   if (threaded == 0) {  /* Reading not supported with threaded writes */
     read_completed = write_completed = 0;
     *result = 0;
@@ -927,7 +1041,7 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff)
     rc = libusb_submit_transfer(transfer_out);
     if (rc < 0) {
       transfer_out_pending = false;
-      libusb_cancel_transfer(transfer_in);
+      LIBUSB_CancelIn();
       USBERR(stderr, "[USBSID] submit OUT failed %d - %s: %s\n",
         rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
       return 0xFF;
@@ -946,7 +1060,7 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff)
 
 unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff, uint16_t cycles)
 {
-  if (!us_PortIsOpen) return 0;
+  if (!us_PortIsOpen || transfer_in == NULL || transfer_out == NULL) return 0;
   if (threaded == 0) {  /* Reading not supported with threaded writes */
     USBSID_WaitForCycle(cycles);
     read_completed = 0;
@@ -968,7 +1082,7 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff, uint16_t cycle
     rc = libusb_submit_transfer(transfer_out);
     if (rc < 0) {
       transfer_out_pending = false;
-      libusb_cancel_transfer(transfer_in);
+      LIBUSB_CancelIn();
       USBERR(stderr, "[USBSID] submit OUT failed %d - %s: %s\n",
         rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
       return 0xFF;
@@ -984,6 +1098,314 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff, uint16_t cycle
   }
   return 0xFF;
 }
+
+
+/* SID STREAM */
+#ifdef USBSID_SID_STREAM
+
+/**
+ * @brief: Start the SID memory stream on the stream interface
+ *
+ * Claims STREAM_ITF, submits STREAM_TRANSFERS persistent IN transfers, starts
+ * the stream event thread and sends STREAM_REQ_START. A running stream is
+ * restarted with the new settings, the cache starts empty.
+ *
+ * @note Reads US_FEATURES first: firmware without the SID stream
+ *       (US_FEATURE_SIDSTREAM) returns -1 and the driver works as before.
+ *
+ * @param rate_hz: 50, 60, 250, 500 or 1000, 0 for the firmware default (50)
+ * @param sid_mask: bit n = SID n+1, 0 for all configured SIDs
+ * @return: 0, -1 on failure
+ */
+int USBSID_Class::USBSID_StreamStart(int rate_hz, uint8_t sid_mask)
+{
+  if (!us_PortIsOpen || devh == NULL || device_lost) return -1;
+  if (rate_hz < 0 || rate_hz > 0xFFFF) return -1;
+  USBSID_StreamStop();
+  features = -1;  /* Read fresh */
+  const int f = USBSID_GetFeatures();
+  if (f < 0 || !(f & US_FEATURE_SIDSTREAM)) return -1;
+  int r = libusb_claim_interface(devh, STREAM_ITF);
+  if (r < 0) {
+    USBERR(stderr, "[USBSID] Stream interface %d not available: %d, %s: %s\n",
+      STREAM_ITF, r, libusb_error_name(r), libusb_strerror((enum libusb_error)r));
+    return -1;
+  }
+  stream_claimed = true;
+  uint8_t info[STREAM_INFO_LEN];
+  if (USBSID_StreamQuery(info) < 0) {
+    USBSID_StreamStop();
+    return -1;
+  }
+  /* START increments the firmware session, frames of older sessions are dropped */
+  stream_session = (info[10] + 1) & 0xFF;
+  stream_errors = 0;
+  for (int i = 0; i < 128; i++) stream_regs[i].store(0, std::memory_order_relaxed);
+  for (int i = 0; i < 4; i++) {
+    stream_frames[i] = 0;
+    stream_cycles[i] = 0;
+    stream_processed[i] = 0;
+    stream_tick[i] = 0;
+    stream_flags[i] = 0;
+  }
+
+  stream_active = true;
+  for (int i = 0; i < STREAM_TRANSFERS; i++) {
+    uint8_t *buf = (uint8_t *)malloc(LEN_OUT_BUFFER);
+    stream_xfer[i] = libusb_alloc_transfer(0);
+    if (buf == NULL || stream_xfer[i] == NULL) {
+      if (buf != NULL) free(buf);
+      USBSID_StreamStop();
+      return -1;
+    }
+    libusb_fill_bulk_transfer(stream_xfer[i], devh, STREAM_EP_IN, buf, LEN_OUT_BUFFER,
+      usb_stream_in, this, 0);
+    stream_xfer[i]->flags = LIBUSB_TRANSFER_FREE_BUFFER;  /* libusb_free_transfer() frees buf */
+    stream_pending[i] = true;
+    r = libusb_submit_transfer(stream_xfer[i]);
+    if (r < 0) {
+      stream_pending[i] = false;
+      USBERR(stderr, "[USBSID] Error submitting stream transfer: %d, %s: %s\n",
+        r, libusb_error_name(r), libusb_strerror((enum libusb_error)r));
+      USBSID_StreamStop();
+      return -1;
+    }
+  }
+
+  stream_events = true;
+  r = pthread_create(&stream_ptid, NULL, &USBSID_Class::_USBSID_StreamThread, this);
+  if (r != 0) {
+    stream_events = false;
+    USBERR(stderr, "[USBSID] Stream thread can't be created :[%s]\n", strerror(r));
+    USBSID_StreamStop();
+    return -1;
+  }
+  stream_thread = true;
+
+  uint8_t start[4] = {
+    (uint8_t)(rate_hz & 0xFF), (uint8_t)((rate_hz >> 8) & 0xFF),
+    (uint8_t)(sid_mask & 0x0F), 0  /* byte 3 reserved */
+  };
+  r = libusb_control_transfer(devh,
+    LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE,
+    STREAM_REQ_START, 0, STREAM_ITF, start, sizeof(start), 1000);
+  if (r < 0) {  /* Unsupported rate stalls */
+    USBERR(stderr, "[USBSID] Stream start (rate %d) refused: %d, %s: %s\n",
+      rate_hz, r, libusb_error_name(r), libusb_strerror((enum libusb_error)r));
+    LIBUSB_CheckLost(r);
+    USBSID_StreamStop();
+    return -1;
+  }
+  return 0;
+}
+
+/**
+ * @brief: Stop the stream, cancel its transfers, release the interface
+ *
+ * @note Safe to call without a running stream
+ *
+ * @return: 0
+ */
+int USBSID_Class::USBSID_StreamStop(void)
+{
+  if (!stream_claimed && !stream_thread) return 0;
+  if (stream_active && devh != NULL && !device_lost) {
+    int r = libusb_control_transfer(devh,
+      LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE,
+      STREAM_REQ_STOP, 0, STREAM_ITF, NULL, 0, 1000);
+    LIBUSB_CheckLost(r);
+  }
+  stream_active = false;
+  stream_session = -1;
+  for (int i = 0; i < STREAM_TRANSFERS; i++) {
+    if (stream_xfer[i] != NULL && stream_pending[i]) {
+      libusb_cancel_transfer(stream_xfer[i]);
+    }
+  }
+
+  /* Wait for the cancel callbacks, bounded for an unresponsive device */
+  const timestamp_t limit = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+  for (;;) {
+    bool pending = false;
+    for (int i = 0; i < STREAM_TRANSFERS; i++) pending = pending || stream_pending[i];
+    if (!pending || std::chrono::steady_clock::now() >= limit) break;
+    if (stream_thread) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } else {
+      struct timeval tv = {0, 1000};
+      libusb_handle_events_timeout_completed(ctx, &tv, NULL);
+    }
+  }
+  if (stream_thread) {
+    stream_events = false;
+    pthread_join(stream_ptid, NULL);
+    stream_thread = false;
+  }
+
+  /* A transfer still in flight stays allocated, its callback frees it */
+  for (int i = 0; i < STREAM_TRANSFERS; i++) {
+    if (stream_xfer[i] == NULL) continue;
+    if (stream_pending[i]) {
+      stream_xfer[i]->user_data = NULL;
+    } else {
+      libusb_free_transfer(stream_xfer[i]);
+    }
+    stream_xfer[i] = NULL;
+    stream_pending[i] = false;
+  }
+  if (stream_claimed && devh != NULL) {
+    libusb_release_interface(devh, STREAM_ITF);
+  }
+  stream_claimed = false;
+  return 0;
+}
+
+/**
+ * @brief: Check whether the stream delivers frames
+ *
+ * @return: true when started and at least one IN transfer is alive
+ */
+bool USBSID_Class::USBSID_StreamRunning(void)
+{
+  if (!stream_active) return false;
+  for (int i = 0; i < STREAM_TRANSFERS; i++) {
+    if (stream_pending[i]) return true;
+  }
+  return false;
+}
+
+/**
+ * @brief: Read the firmware stream state (STREAM_REQ_INFO)
+ *
+ * [0] format version, [1] frame size, [2-3] max rate LE, [4] SID count,
+ * [5] bit 0 running, [6-7] rate LE, [8] active SID mask, [9] reserved,
+ * [10] session, [12-15] frames dropped LE
+ *
+ * @param info: receives STREAM_INFO_LEN bytes
+ * @return: 0, -1 on failure or firmware without the stream
+ */
+int USBSID_Class::USBSID_StreamQuery(uint8_t info[STREAM_INFO_LEN])
+{
+  if (!us_PortIsOpen || devh == NULL || info == NULL) return -1;
+  memset(info, 0, STREAM_INFO_LEN);
+  int r = libusb_control_transfer(devh,
+    LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE,
+    STREAM_REQ_INFO, 0, STREAM_ITF, info, STREAM_INFO_LEN, 1000);
+  if (r < 0) {
+    LIBUSB_CheckLost(r);
+    return -1;
+  }
+  return (r >= 11) ? 0 : -1;
+}
+
+/**
+ * @brief: Last streamed value of a register, no USB traffic
+ *
+ * @note $00-$18 mirror the last written value (a clone's also the last
+ *       read value), $19-$1C the last read value. Age:
+ *       USBSID_GetStreamState()
+ *
+ * @param reg: register, bits 5-6 select the SID as for USBSID_Write()
+ * @return: 0-255, -1 when no frame of that SID arrived yet
+ */
+int USBSID_Class::USBSID_ReadCached(uint8_t reg)
+{
+  if (stream_frames[(reg >> 5) & 0x03].load(std::memory_order_acquire) == 0) return -1;
+  return stream_regs[reg & 0x7F].load(std::memory_order_relaxed);
+}
+
+/**
+ * @brief: Copy the streamed registers of all 4 SIDs
+ *
+ * @note Registers of one SID can mix two consecutive frames
+ *
+ * @param out: receives 128 bytes, SID n at n * 32, 0 for SIDs without data
+ * @return: bit n set for each SID n with data, -1 for a NULL out
+ */
+int USBSID_Class::USBSID_GetSidMemory(uint8_t out[128])
+{
+  if (out == NULL) return -1;
+  int mask = 0;
+  for (int sid = 0; sid < 4; sid++) {
+    if (stream_frames[sid].load(std::memory_order_acquire) != 0) mask |= (1 << sid);
+  }
+  for (int i = 0; i < 128; i++) out[i] = stream_regs[i].load(std::memory_order_relaxed);
+  return mask;
+}
+
+/**
+ * @brief: Info of the latest frame of one SID
+ *
+ * @param sid: SID 0-3 of this board
+ * @param state: receives the frame info, frames 0 without data
+ * @return: false for an invalid sid or a NULL state
+ */
+bool USBSID_Class::USBSID_GetStreamState(int sid, USBSID_StreamState *state)
+{
+  if (sid < 0 || sid > 3 || state == NULL) return false;
+  state->frames = stream_frames[sid].load(std::memory_order_acquire);
+  state->tick = stream_tick[sid];
+  state->flags = stream_flags[sid];
+  state->cycles = stream_cycles[sid];
+  state->processed = stream_processed[sid];
+  return true;
+}
+
+/**
+ * @brief: Set the raw frame callback
+ *
+ * @param cb: called with every accepted frame in the stream event thread, NULL to remove
+ * @param user: passed to cb
+ */
+void USBSID_Class::USBSID_SetStreamCallback(USBSID_StreamCallback cb, void *user)
+{
+  pthread_mutex_lock(&stream_cb_mutex);
+  stream_cb = cb;
+  stream_cb_user = user;
+  pthread_mutex_unlock(&stream_cb_mutex);
+}
+
+/**
+ * @brief: Store one received frame in the cache, call the frame callback
+ *
+ * @param f: frame
+ * @param len: received length
+ */
+void USBSID_Class::USBSID_StreamFrame(const uint8_t *f, int len)
+{
+  if (len != STREAM_FRAME_SIZE || f[0] != STREAM_FRAME_SID) return;
+  if ((int)f[48] != stream_session) return;  /* Older session or not started */
+  const int sid = f[1] & 0x03;
+  for (int r = 0; r < 32; r++) {
+    stream_regs[sid * 32 + r].store(f[12 + r], std::memory_order_relaxed);
+  }
+  stream_tick[sid] = (uint16_t)(f[2] | (f[3] << 8));
+  stream_flags[sid] = (uint8_t)(f[1] & 0xE0);
+  stream_cycles[sid] = (uint32_t)f[4] | ((uint32_t)f[5] << 8) | ((uint32_t)f[6] << 16) | ((uint32_t)f[7] << 24);
+  stream_processed[sid] = (uint32_t)f[8] | ((uint32_t)f[9] << 8) | ((uint32_t)f[10] << 16) | ((uint32_t)f[11] << 24);
+  stream_frames[sid].fetch_add(1, std::memory_order_release);
+  pthread_mutex_lock(&stream_cb_mutex);
+  if (stream_cb != NULL) stream_cb(f, len, stream_cb_user);
+  pthread_mutex_unlock(&stream_cb_mutex);
+}
+
+/**
+ * @brief: Stream event thread, handles libusb events while the stream runs
+ *
+ * @note Also completes the driver's own async transfers while it runs
+ */
+void* USBSID_Class::USBSID_StreamThread(void)
+{
+  #ifdef _GNU_SOURCE
+  pthread_setname_np(pthread_self(), "USBSID Stream");
+  #endif
+  while (stream_events) {
+    struct timeval tv = {0, 20000};
+    libusb_handle_events_timeout_completed(ctx, &tv, NULL);
+  }
+  return NULL;
+}
+#endif /* USBSID_SID_STREAM */
 
 
 /* THREADING */
@@ -1753,6 +2175,26 @@ int USBSID_Class::LIBUSB_ReadIn(unsigned char *buff, size_t len, int *actual_len
 }
 
 /**
+ * @brief Cancel the pending async IN transfer and wait for its callback
+ *
+ * @note Bounded wait, the transfer stays pending on an unresponsive device
+ *       and a later submit returns LIBUSB_ERROR_BUSY instead of crashing
+ */
+void USBSID_Class::LIBUSB_CancelIn(void)
+{
+  if (transfer_in == NULL || !transfer_in_pending) return;
+  if (libusb_cancel_transfer(transfer_in) != 0) {  /* Not in flight anymore */
+    transfer_in_pending = false;
+    return;
+  }
+  const timestamp_t limit = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+  while (transfer_in_pending && std::chrono::steady_clock::now() < limit) {
+    struct timeval tv = {0, 1000};
+    libusb_handle_events_timeout_completed(ctx, &tv, NULL);
+  }
+}
+
+/**
  * @brief: Mark the device lost on a missing device or repeated out failures
  *
  * @param error: libusb error code or transfer status, negative for an error code
@@ -1918,6 +2360,7 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
 {
   rc = read_completed = write_completed = -1;
   features = -1;  /* Firmware may differ from the last open */
+  fwversion = -1;
   device_lost = false;
   out_failures = 0;
   threaded = start_threaded;
@@ -1980,6 +2423,9 @@ int USBSID_Class::LIBUSB_Exit(void)
    * leaves rc < 0 with the device still open and its interface claimed, which
    * on MacOS locks the device for retries and for every other process */
   if (devh) {
+#ifdef USBSID_SID_STREAM
+    USBSID_StreamStop();
+#endif /* USBSID_SID_STREAM */
     USBSID_StopThread();
     #ifdef US_MUTE_ON_EXIT
     USBSID_Mute();
@@ -2059,11 +2505,47 @@ void LIBUSB_CALL USBSID_Class::usb_in(struct libusb_transfer *transfer)
     memcpy(self->result, self->in_buffer, 1);
   }
 
-  if (self) {
-    self->read_completed = 1;
-    self->transfer_in_pending = false;
+
+#ifdef USBSID_SID_STREAM
+void LIBUSB_CALL USBSID_Class::usb_stream_in(struct libusb_transfer *transfer)
+{
+  USBSID_Class *self = (USBSID_Class *)transfer->user_data;
+
+  if (self == NULL) {  /* Detached by USBSID_StreamStop(), owned by nobody */
+    libusb_free_transfer(transfer);
+    return;
   }
+
+  int idx = -1;
+  for (int i = 0; i < STREAM_TRANSFERS; i++) {
+    if (self->stream_xfer[i] == transfer) idx = i;
+  }
+
+  switch (transfer->status) {
+    case LIBUSB_TRANSFER_COMPLETED:
+      self->USBSID_StreamFrame(transfer->buffer, transfer->actual_length);
+      break;
+    case LIBUSB_TRANSFER_CANCELLED:
+    case LIBUSB_TRANSFER_TIMED_OUT:
+      break;
+    case LIBUSB_TRANSFER_NO_DEVICE:
+      self->stream_errors++;
+      self->LIBUSB_CheckLost(LIBUSB_ERROR_NO_DEVICE);
+      break;
+    default:
+      self->stream_errors++;
+      break;
+  }
+
+  /* Resubmit while the stream runs, an errored transfer stays down */
+  if (self->stream_active && !self->device_lost
+      && (transfer->status == LIBUSB_TRANSFER_COMPLETED || transfer->status == LIBUSB_TRANSFER_TIMED_OUT)) {
+    if (libusb_submit_transfer(transfer) == 0) return;
+    self->stream_errors++;
+  }
+  if (idx >= 0) self->stream_pending[idx] = false;
 }
+#endif /* USBSID_SID_STREAM */
 
 } /* extern "C" */
 

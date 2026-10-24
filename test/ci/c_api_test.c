@@ -56,8 +56,20 @@ int main(void)
   setpassive_USBSID(NULL, true);
   check(sendcommand_USBSID(NULL, items, 4) == -1, "sendcommand NULL");
   check(readresponse_USBSID(NULL, cfg, 1) == -1, "readresponse NULL");
+  check(readmulti_USBSID(NULL, items, cfg, 1) == -1, "readmulti NULL");
+#ifdef USBSID_SID_STREAM
+  check(streamstart_USBSID(NULL, 0, 0) == -1, "streamstart NULL");
+  check(streamstop_USBSID(NULL) == -1, "streamstop NULL");
+  check(!streamrunning_USBSID(NULL), "streamrunning NULL");
+  check(streamquery_USBSID(NULL, cfg) == -1, "streamquery NULL");
+  check(readcached_USBSID(NULL, 0x1B) == -1, "readcached NULL");
+  check(getsidmemory_USBSID(NULL, cfg) == -1, "getsidmemory NULL");
+  check(!getstreamstate_USBSID(NULL, 0, NULL), "getstreamstate NULL");
+  setstreamcallback_USBSID(NULL, NULL, NULL);
+#endif /* USBSID_SID_STREAM */
   check(sendconfig_USBSID(NULL, 0x82, 0, 0, 0, 0) == -1, "sendconfig NULL");
   check(getfeatures_USBSID(NULL) == -1, "getfeatures NULL");
+  check(getfirmwareversionint_USBSID(NULL) == -1, "getfirmwareversionint NULL");
   check(uploadtune_USBSID(NULL, items, 4, USBSID_UPLOAD_FILE_SID) == -1, "uploadtune NULL");
   check(playersetplaytime_USBSID(NULL, 1000) == -1, "playersetplaytime NULL");
   check(playerload_USBSID(NULL, 0) == -1, "playerload NULL");
@@ -94,7 +106,24 @@ int main(void)
   setpassive_USBSID(us, true);
   check(sendcommand_USBSID(us, items, 4) == -1, "sendcommand without connection");
   check(readresponse_USBSID(us, cfg, 1) == -1, "readresponse without connection");
+  check(readmulti_USBSID(us, items, cfg, 1) == -1, "readmulti without connection");
+#ifdef USBSID_SID_STREAM
+  {
+    uint8_t mem[128];
+    USBSIDstreamstate st;
+    check(streamstart_USBSID(us, 1000, 0) == -1, "streamstart without connection");
+    check(streamstop_USBSID(us) == 0, "streamstop without stream");
+    check(!streamrunning_USBSID(us), "streamrunning without stream");
+    check(streamquery_USBSID(us, mem) == -1, "streamquery without connection");
+    check(readcached_USBSID(us, 0x1B) == -1, "readcached without stream");
+    check(getsidmemory_USBSID(us, mem) == 0, "getsidmemory without stream");
+    check(getstreamstate_USBSID(us, 0, &st) && st.frames == 0, "getstreamstate without stream");
+    check(!getstreamstate_USBSID(us, 4, &st), "getstreamstate invalid sid");
+    setstreamcallback_USBSID(us, NULL, NULL);
+  }
+#endif /* USBSID_SID_STREAM */
   check(getfeatures_USBSID(us) == -1, "getfeatures without connection");
+  check(getfirmwareversionint_USBSID(us) == -1, "getfirmwareversionint without connection");
   check(uploadtune_USBSID(us, items, 4, USBSID_UPLOAD_FILE_PRG) == -1, "uploadtune without connection");
   check(playercommand_USBSID(us, USBSID_PLAYER_PAUSE) == -1, "playercommand without connection");
   check(playertime_USBSID(us) == -1, "playertime without connection");
@@ -124,6 +153,7 @@ int main(void)
   check(totalsids_USBSIDMgr(mgr) == 0, "mgr totalsids");
   check(boardcount_USBSIDMgr(mgr) == 0, "mgr boardcount");
   check(!getboardinfo_USBSIDMgr(mgr, 0, &board), "mgr boardinfo");
+  check(getfirmwareversionint_USBSIDMgr(mgr, 0) == -1, "mgr firmwareversionint out of range");
   check(!getlogicalslot_USBSIDMgr(mgr, 0, &slot), "mgr logicalslot");
   check(board_USBSIDMgr(NULL, 0) == NULL, "mgr board NULL");
   check(board_USBSIDMgr(mgr, 0) == NULL, "mgr board out of range");
@@ -131,6 +161,14 @@ int main(void)
   writering_USBSIDMgr(mgr, 0, 0x18, 0x0F);
   writeringcycled_USBSIDMgr(mgr, -1, 0x18, 0x0F, 8);
   check(read_USBSIDMgr(mgr, 0, 0x1B) == 0, "mgr read");
+  check(readmulti_USBSIDMgr(mgr, 0, items, cfg, 1) == -1, "mgr readmulti unknown sid");
+  check(readmulti_USBSIDMgr(NULL, 0, items, cfg, 1) == -1, "mgr readmulti NULL");
+#ifdef USBSID_SID_STREAM
+  check(streamstartall_USBSIDMgr(mgr, 0) == 0, "mgr streamstartall without boards");
+  streamstopall_USBSIDMgr(mgr);
+  check(readcached_USBSIDMgr(mgr, 0, 0x1B) == -1, "mgr readcached unknown sid");
+  check(readcached_USBSIDMgr(NULL, 0, 0x1B) == -1, "mgr readcached NULL");
+#endif /* USBSID_SID_STREAM */
   writeringcycledn_USBSIDMgr(mgr, 0, items, 1);
   check(ringfreebytes_USBSIDMgr(mgr, 0) == 0, "mgr ringfreebytes unknown sid");
   check(!anyboardlost_USBSIDMgr(mgr), "mgr anyboardlost without boards");

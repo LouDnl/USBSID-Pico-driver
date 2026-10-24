@@ -28,6 +28,18 @@
 #ifndef _USBSID_H_
 #define _USBSID_H_
 
+/**
+ * Compile time options (define on the compiler command line):
+ *   USBSID_SID_STREAM  Build the SID register stream host API (USBSID_StreamStart,
+ *                      USBSID_ReadCached, USBSID_GetSidMemory and the C wrappers).
+ *                      Off by default, future use. Needs firmware built with
+ *                      ENABLE_SID_STREAM (USE_SID_STREAM, USB interface 7,
+ *                      US_FEATURES bit 6). Define it for every file that includes
+ *                      the driver headers, not only for the driver sources.
+ *   USE_VENDOR_ITF     Use the vendor interface instead of CDC (always on for macOS).
+ *   USBSID_DEBUG       Debug output.
+ */
+
 #ifdef __APPLE__
 #undef HAVE_ALIGNED_ALLOC
 /**
@@ -196,6 +208,7 @@ namespace USBSID_NS
 
   /* Config sub commands, byte 1 after (COMMAND << 6 | CONFIG) */
   enum {
+    USBSID_VERSION      = 0x80,  /* Byte 2 != 0: firmware version integer, 1 byte (81 = 0.8.1, 100 = 1.0.0) */
     US_FEATURES         = 0x82,  /* Read compiled firmware features, 1 byte */
     /* Onboard emulator, firmware built with ONBOARD_EMULATOR=1 only */
     UPLOAD_SID_START    = 0xD0,  /* Enter receiving mode, byte 2 = file type */
@@ -224,12 +237,46 @@ namespace USBSID_NS
 
   /* US_FEATURES reply bits */
   enum {
-    US_FEATURE_RP2350   = 0x01,
-    US_FEATURE_RGBVU    = 0x04,
-    US_FEATURE_NET      = 0x10,
-    US_FEATURE_NSD      = 0x20,
-    US_FEATURE_EMULATOR = 0x80,
+    US_FEATURE_RP2350    = 0x01,
+    US_FEATURE_RGBVU     = 0x04,
+    US_FEATURE_NET       = 0x10,
+    US_FEATURE_NSD       = 0x20,
+    US_FEATURE_SIDSTREAM = 0x40,  /* SID stream interface (USB interface 7) built in */
+    US_FEATURE_EMULATOR  = 0x80,
   };
+
+  /* Firmware version integer from which batch READ (USBSID_ReadMulti) exists, no feature bit */
+  #define US_FW_VERSION_BATCH_READ 81
+
+#ifdef USBSID_SID_STREAM
+  /* SID stream interface, firmware with US_FEATURE_SIDSTREAM */
+  enum {
+    STREAM_ITF           = 7,     /* Vendor interface, claimed by USBSID_StreamStart() */
+    STREAM_EP_IN         = 0x87,
+    STREAM_REQ_START     = 0x10,  /* Vendor control OUT, 4 bytes: rate LE, SID mask, 0 (byte 3 reserved) */
+    STREAM_REQ_STOP      = 0x11,  /* Vendor control OUT, no data */
+    STREAM_REQ_INFO      = 0x12,  /* Vendor control IN, STREAM_INFO_LEN bytes */
+    STREAM_INFO_LEN      = 16,
+    STREAM_FRAME_SID     = 0x53,  /* frame[0] of a SID frame */
+    STREAM_FRAME_SIZE    = 63,    /* Short packet, one SID per frame */
+    STREAM_TRANSFERS     = 4,     /* Persistent IN transfers */
+    STREAM_FLAG_DEFERRED = 0x20,  /* Built late, mirror only */
+    STREAM_FLAG_OTHER    = 0x40,  /* Bus owned by a non USB owner */
+  };
+
+  /* Latest stream frame of one SID, see USBSID_GetStreamState() */
+  struct USBSID_StreamState {
+    uint32_t frames = 0;     /* Frames received since USBSID_StreamStart(), 0: no data */
+    uint16_t tick = 0;       /* Firmware tick sequence */
+    uint8_t flags = 0;       /* STREAM_FLAG_* bits */
+    uint32_t cycles = 0;     /* PHI1 cycle counter of the snapshot */
+    uint32_t processed = 0;  /* Main interface packets the firmware processed */
+  };
+
+  /* Raw frame callback, runs in the stream event thread: no USB I/O on this
+   * driver instance from inside it */
+  typedef void (*USBSID_StreamCallback)(const uint8_t *frame, int len, void *user);
+#endif /* USBSID_SID_STREAM */
 
   #define UPLOAD_PACKET_SIZE  64  /* Every upload packet is a full 64 byte packet */
   #define UPLOAD_PAYLOAD_SIZE 62  /* Data bytes per UPLOAD_SID_DATA packet */
@@ -366,8 +413,8 @@ namespace USBSID_NS
       struct libusb_device_handle *devh = NULL;
       struct libusb_transfer *transfer_out = NULL;   /* OUT-going transfers (OUT from host PC to USB-device) */
       struct libusb_transfer *transfer_in = NULL;    /* IN-coming transfers (IN to host PC from USB-device) */
-      bool transfer_out_pending = false;             /* for better transfer out sync */
-      bool transfer_in_pending = false;              /* for better transfer in sync */
+      std::atomic_bool transfer_out_pending{false};  /* for better transfer out sync, set by callbacks in any event thread */
+      std::atomic_bool transfer_in_pending{false};   /* for better transfer in sync, set by callbacks in any event thread */
       std::atomic_bool device_lost{false};           /* unplugged or out transfers keep failing */
       int out_failures = 0;                          /* consecutive failed out transfers */
       bool in_buffer_dma = false;                    /* is the in buffer DMA or not */
@@ -403,6 +450,7 @@ namespace USBSID_NS
       int pcbversion = -1;
       int socketconfig = -1;
       int features = -1;                             /* US_FEATURES reply, -1 until read */
+      int fwversion = -1;                            /* USBSID_VERSION integer reply, -1 until read */
       bool passive = false;                          /* open without touching SID state */
 
       /* Threading the needle */
@@ -411,6 +459,35 @@ namespace USBSID_NS
       pthread_mutex_t us_mutex = PTHREAD_MUTEX_INITIALIZER;
       pthread_cond_t us_cond = PTHREAD_COND_INITIALIZER;
       pthread_t us_ptid;
+
+#ifdef USBSID_SID_STREAM
+      /* SID stream, cache written by the stream event thread only */
+      struct libusb_transfer *stream_xfer[STREAM_TRANSFERS] = {};
+      std::atomic_bool stream_pending[STREAM_TRANSFERS] = {};
+      std::atomic_bool stream_active{false};         /* callbacks resubmit */
+      std::atomic_bool stream_events{false};         /* event thread runs */
+      bool stream_claimed = false;                   /* STREAM_ITF claimed */
+      bool stream_thread = false;                    /* stream_ptid joinable */
+      pthread_t stream_ptid;
+      std::atomic_int stream_session{-1};            /* frame[48] to accept, -1 none */
+      std::atomic_uint stream_errors{0};             /* failed IN transfers */
+      std::atomic<uint8_t> stream_regs[128] = {};    /* sid_memory mirror, 4 x 32 */
+      std::atomic<uint32_t> stream_frames[4] = {};
+      std::atomic<uint32_t> stream_cycles[4] = {};
+      std::atomic<uint32_t> stream_processed[4] = {};
+      std::atomic<uint16_t> stream_tick[4] = {};
+      std::atomic<uint8_t> stream_flags[4] = {};
+      pthread_mutex_t stream_cb_mutex = PTHREAD_MUTEX_INITIALIZER;
+      USBSID_StreamCallback stream_cb = NULL;
+      void *stream_cb_user = NULL;
+      void* USBSID_StreamThread(void);
+      static void *_USBSID_StreamThread(void *context)
+      {
+        return ((USBSID_Class *)context)->USBSID_StreamThread();
+      }
+      void USBSID_StreamFrame(const uint8_t *f, int len);
+      static void LIBUSB_CALL usb_stream_in(struct libusb_transfer *transfer);
+#endif /* USBSID_SID_STREAM */
 
       /* LIBUSB */
       int LIBUSB_Setup(bool start_threaded, bool with_cycles);
@@ -422,6 +499,7 @@ namespace USBSID_NS
       int LIBUSB_DetachKernelDriver(void);
       int LIBUSB_ConfigureDevice(void);
       int LIBUSB_ReadIn(unsigned char *buff, size_t len, int *actual_length);
+      void LIBUSB_CancelIn(void);
       void LIBUSB_CheckLost(int error);
       void LIBUSB_InitOutBuffer(void);
       void LIBUSB_FreeOutBuffer(void);
@@ -507,6 +585,7 @@ namespace USBSID_NS
       /* Synchronous direct */
       void USBSID_SingleWrite(unsigned char *buff, size_t len);                /* Single write buffer of size_t ~ example: config writing */
       unsigned char USBSID_SingleRead(uint8_t reg);                            /* Single read register, return result */
+      int USBSID_ReadMulti(const uint8_t *regs, uint8_t *out, int n);          /* Read n (1-63) registers in one round trip, returns n or -1 */
       unsigned char USBSID_SingleReadConfig(unsigned char *buff, size_t len);  /* Single to buffer of specified length ~ example: config reading */
       int USBSID_ReadConfig(unsigned char *buff, size_t len);                  /* Single to buffer of specified length ~ returns size of data */
 
@@ -517,6 +596,20 @@ namespace USBSID_NS
       int USBSID_SendConfig(uint8_t sub, uint8_t a, uint8_t b,                 /* Send (COMMAND << 6 | CONFIG), sub, a..d as a 6 byte packet */
                             uint8_t c, uint8_t d);
       int USBSID_GetFeatures(void);                                            /* US_FEATURES bitmask, cached, -1 on failure */
+      int USBSID_GetFirmwareVersionInt(void);                                  /* Firmware version integer (81 = 0.8.1), cached, -1 on failure */
+
+#ifdef USBSID_SID_STREAM
+      /* SID stream (firmware with US_FEATURE_SIDSTREAM), works threaded and unthreaded */
+      int USBSID_StreamStart(int rate_hz, uint8_t sid_mask);                   /* rate 0 = 50 Hz, sid_mask 0 = all, 0 or -1 */
+      int USBSID_StreamStop(void);                                             /* Stop and release the stream interface, 0 */
+      bool USBSID_StreamRunning(void);                                         /* Started and IN transfers alive */
+      int USBSID_StreamQuery(uint8_t info[STREAM_INFO_LEN]);                   /* Raw STREAM_REQ_INFO reply, 0 or -1 */
+      int USBSID_ReadCached(uint8_t reg);                                      /* Last streamed value 0-255, -1 without data for that SID */
+      int USBSID_GetSidMemory(uint8_t out[128]);                               /* Copy all 4 x 32 registers, mask of SIDs with data or -1 */
+      bool USBSID_GetStreamState(int sid, USBSID_StreamState *state);          /* Latest frame info of SID 0-3 */
+      unsigned int USBSID_StreamErrors(void) { return stream_errors; }         /* Failed stream IN transfers */
+      void USBSID_SetStreamCallback(USBSID_StreamCallback cb, void *user);     /* Raw frames, NULL to remove */
+#endif /* USBSID_SID_STREAM */
 
       /* Onboard emulator (firmware with ONBOARD_EMULATOR=1) */
       int USBSID_UploadTune(const uint8_t *data, size_t len, uint8_t filetype);/* Upload a SID/PRG file, returns bytes sent or -1 */

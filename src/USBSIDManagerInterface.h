@@ -104,6 +104,14 @@ extern "C" {
   bool getboardinfo_USBSIDMgr(USBSIDmgr, int board, USBSIDboardinfo *out);
 
   /**
+   * @brief: Firmware version integer of a board, read once by openall_USBSIDMgr().
+   *
+   * @param board: 0-based board index
+   * @return: e.g. 81 (0.8.1), 100 (1.0.0), -1 if unknown or board is out of range
+   */
+  int getfirmwareversionint_USBSIDMgr(USBSIDmgr, int board);
+
+  /**
    * @brief: Copy the board mapping of a logical SID.
    *
    * @param logical_sid: 0 .. totalsids_USBSIDMgr() - 1
@@ -127,6 +135,15 @@ extern "C" {
   void writering_USBSIDMgr(USBSIDmgr, int logical_sid, uint8_t reg, uint8_t val);
   void writeringcycled_USBSIDMgr(USBSIDmgr, int logical_sid, uint8_t reg, uint8_t val, uint16_t cycles);
   unsigned char read_USBSIDMgr(USBSIDmgr, int logical_sid, uint8_t reg);
+  /* n (1-63) board local registers in one round trip, n or -1 */
+  int readmulti_USBSIDMgr(USBSIDmgr, int logical_sid, const uint8_t *regs, uint8_t *out, int n);
+#ifdef USBSID_SID_STREAM
+  /* SID stream on every open board, rate 0 = 50 Hz, number of boards streaming */
+  int streamstartall_USBSIDMgr(USBSIDmgr, int rate_hz);
+  void streamstopall_USBSIDMgr(USBSIDmgr);
+  /* last streamed board local register, no USB traffic, -1 without data */
+  int readcached_USBSIDMgr(USBSIDmgr, int logical_sid, uint8_t reg);
+#endif /* USBSID_SID_STREAM */
   /* count x (reg, val, cycles hi, cycles lo) in one lock, regs board local */
   void writeringcycledn_USBSIDMgr(USBSIDmgr, int logical_sid, const uint8_t *items, int count);
   /* free ringbuffer bytes of the board owning logical_sid, 0 for an unknown SID */

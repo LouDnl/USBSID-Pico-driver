@@ -42,6 +42,18 @@ int main(void)
     check(us.USBSID_GetSerial().empty(), "empty serial before open");
     uint8_t cfg[SOCKET_BUFFER_SIZE] = {0};
     check(us.USBSID_GetSocketConfig(cfg) == nullptr, "socketconfig without connection");
+#ifdef USBSID_SID_STREAM
+    {
+      uint8_t mem[128];
+      USBSID_StreamState st;
+      check(us.USBSID_StreamStart(1000, 0) == -1, "streamstart without connection");
+      check(us.USBSID_StreamStop() == 0, "streamstop without stream");
+      check(!us.USBSID_StreamRunning(), "streamrunning without stream");
+      check(us.USBSID_ReadCached(0x1B) == -1, "readcached without stream");
+      check(us.USBSID_GetSidMemory(mem) == 0, "getsidmemory without stream");
+      check(us.USBSID_GetStreamState(0, &st) && st.frames == 0, "streamstate without stream");
+    }
+#endif /* USBSID_SID_STREAM */
     check(us.USBSID_WaitForCycle(1000) > 0, "waitforcycle");
     check(us.USBSID_RingFree() == 0, "ringfree without ringbuffer");
     const uint8_t items[8] = {0x18, 0x0F, 0x00, 0x08, 0x18, 0x00, 0x00, 0x08};
@@ -54,6 +66,7 @@ int main(void)
     check(us.USBSID_ReadResponse(reply, 1) == -1, "readresponse without connection");
     check(us.USBSID_SendConfig(US_FEATURES, 0, 0, 0, 0) == -1, "sendconfig without connection");
     check(us.USBSID_GetFeatures() == -1, "getfeatures without connection");
+    check(us.USBSID_GetFirmwareVersionInt() == -1, "getfirmwareversionint without connection");
     check(us.USBSID_UploadTune(items, sizeof items, UPLOAD_FILE_SID) == -1, "uploadtune without connection");
     check(us.USBSID_UploadTune(nullptr, 4, UPLOAD_FILE_SID) == -1, "uploadtune NULL data");
     check(us.USBSID_PlayerSetPlaytime(1000) == -1, "playersetplaytime without connection");
@@ -73,12 +86,20 @@ int main(void)
     check(mgr.TotalSIDs() == 0, "mgr totalsids");
     check(mgr.BoardCount() == 0, "mgr boardcount");
     check(mgr.Boards().empty(), "mgr boards");
+    check(mgr.FirmwareVersionInt(0) == -1 && mgr.FirmwareVersionInt(-1) == -1, "mgr fwversionint no board");
     check(mgr.LogicalMap().empty(), "mgr logicalmap");
     check(mgr.Board(0) == nullptr, "mgr board out of range");
     check(mgr.Board(-1) == nullptr, "mgr board negative");
     mgr.WriteRing(0, 0x18, 0x0F);
     mgr.WriteRingCycled(-1, 0x18, 0x0F, 8);
     check(mgr.Read(0, 0x1B) == 0, "mgr read");
+    uint8_t regs[2] = {0x1B, 0x1C}, vals[2] = {0, 0};
+    check(mgr.ReadMulti(0, regs, vals, 2) == -1, "mgr readmulti unknown sid");
+#ifdef USBSID_SID_STREAM
+    check(mgr.StreamStartAll(0) == 0, "mgr streamstartall without boards");
+    mgr.StreamStopAll();
+    check(mgr.ReadCached(0, 0x1B) == -1, "mgr readcached unknown sid");
+#endif /* USBSID_SID_STREAM */
     const uint8_t items[4] = {0x18, 0x0F, 0x00, 0x08};
     mgr.WriteRingCycledN(0, items, 1);
     check(mgr.RingFreeBytes(0) == 0, "mgr ringfree unknown sid");

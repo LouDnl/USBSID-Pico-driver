@@ -18,6 +18,10 @@
 #   CSTDS     C standards to build the C tests with (default: c99 c11)
 #   OUT_DIR   output directory (default: ci-out/<target>)
 #
+# Every build is made twice: default, and with -DUSBSID_SID_STREAM (SID stream
+# host API, off by default). Stream tests only exist in the second variant,
+# output directories of that variant end in -stream.
+#
 # Per C++ standard: every .cpp compiles to an object, the objects form a
 # static and a shared library, the test programs link against the static
 # library and run. The tests need no hardware.
@@ -78,15 +82,21 @@ mkdir -p "$OUT_DIR"
 # Build list: <std> or <std>:noexc
 BUILDS="$CXXSTDS $NOEXC_STD:noexc"
 
+for VARIANT in default stream; do
 for SPEC in $BUILDS; do
   CXXSTD="${SPEC%%:*}"
   case "$SPEC" in
     *:noexc) MODE_FLAGS="-fno-exceptions"; BUILD="$OUT_DIR/$CXXSTD-noexc" ;;
     *)       MODE_FLAGS="";                BUILD="$OUT_DIR/$CXXSTD" ;;
   esac
+  DEFS=""
+  if [ "$VARIANT" = "stream" ]; then
+    DEFS="-DUSBSID_SID_STREAM"
+    BUILD="$BUILD-stream"
+  fi
   mkdir -p "$BUILD/obj"
   echo
-  echo "==== $TARGET: -std=$CXXSTD $MODE_FLAGS"
+  echo "==== $TARGET ($VARIANT): -std=$CXXSTD $MODE_FLAGS $DEFS"
 
   # Compile every driver source
   OBJS=""
@@ -94,7 +104,7 @@ for SPEC in $BUILDS; do
     OBJ="$BUILD/obj/$(basename "${SRC%.cpp}").o"
     echo "-- compile $(basename "$SRC")"
     # shellcheck disable=SC2086
-    "$CXX" -std="$CXXSTD" $WARN $MODE_FLAGS -fPIC -pthread $LIBUSB_CFLAGS -I"$SRC_DIR" \
+    "$CXX" -std="$CXXSTD" $WARN $MODE_FLAGS $DEFS -fPIC -pthread $LIBUSB_CFLAGS -I"$SRC_DIR" \
       -c "$SRC" -o "$OBJ"
     OBJS="$OBJS $OBJ"
   done
@@ -117,7 +127,7 @@ for SPEC in $BUILDS; do
     for CSTD in $CSTDS; do
       NAME="${T%.c}-$CSTD"
       echo "-- test    $NAME"
-      "$CC" -std="$CSTD" -pedantic -Wall -Wextra -Werror -I"$SRC_DIR" \
+      "$CC" -std="$CSTD" -pedantic -Wall -Wextra -Werror $DEFS -I"$SRC_DIR" \
         -c "$TESTS/$T" -o "$BUILD/$NAME.o"
       # shellcheck disable=SC2086
       "$CXX" -pthread "$BUILD/$NAME.o" "$STATIC" $LIBUSB_LIBS -o "$BUILD/$NAME$EXE"
@@ -130,11 +140,12 @@ for SPEC in $BUILDS; do
     NAME="${T%.cpp}"
     echo "-- test    $NAME"
     # shellcheck disable=SC2086
-    "$CXX" -std="$CXXSTD" $WARN $MODE_FLAGS -pthread $LIBUSB_CFLAGS -I"$SRC_DIR" \
+    "$CXX" -std="$CXXSTD" $WARN $MODE_FLAGS $DEFS -pthread $LIBUSB_CFLAGS -I"$SRC_DIR" \
       "$TESTS/$T" "$STATIC" $LIBUSB_LIBS -o "$BUILD/$NAME$EXE"
     "$BUILD/$NAME$EXE"
   done
 done
+done
 
 echo
-echo "==== $TARGET: all builds and tests passed ($BUILDS)"
+echo "==== $TARGET: all builds and tests passed ($BUILDS, default and stream)"
