@@ -1186,8 +1186,9 @@ int USBSID_Class::USBSID_StreamStart(int rate_hz, uint8_t sid_mask)
     (uint8_t)(rate_hz & 0xFF), (uint8_t)((rate_hz >> 8) & 0xFF),
     (uint8_t)(sid_mask & 0x0F), 0  /* byte 3 reserved */
   };
+  /* Cast to int, C++20 deprecates | between two different enum types */
   r = libusb_control_transfer(devh,
-    LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE,
+    (int)LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE,
     STREAM_REQ_START, 0, STREAM_ITF, start, sizeof(start), 1000);
   if (r < 0) {  /* Unsupported rate stalls */
     USBERR(stderr, "[USBSID] Stream start (rate %d) refused: %d, %s: %s\n",
@@ -1211,7 +1212,7 @@ int USBSID_Class::USBSID_StreamStop(void)
   if (!stream_claimed && !stream_thread) return 0;
   if (stream_active && devh != NULL && !device_lost) {
     int r = libusb_control_transfer(devh,
-      LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE,
+      (int)LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE,
       STREAM_REQ_STOP, 0, STREAM_ITF, NULL, 0, 1000);
     LIBUSB_CheckLost(r);
   }
@@ -1289,7 +1290,7 @@ int USBSID_Class::USBSID_StreamQuery(uint8_t info[STREAM_INFO_LEN])
   if (!us_PortIsOpen || devh == NULL || info == NULL) return -1;
   memset(info, 0, STREAM_INFO_LEN);
   int r = libusb_control_transfer(devh,
-    LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE,
+    (int)LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE,
     STREAM_REQ_INFO, 0, STREAM_ITF, info, STREAM_INFO_LEN, 1000);
   if (r < 0) {
     LIBUSB_CheckLost(r);

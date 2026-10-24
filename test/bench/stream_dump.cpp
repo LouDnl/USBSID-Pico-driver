@@ -49,8 +49,9 @@ static const uint8_t REQ_STOP = 0x11;
 static const uint8_t REQ_INFO = 0x12;
 static const uint8_t FRAME_SID = 0x53;
 static const int FRAME_SIZE = 63;
-static const uint8_t REQTYPE_OUT = LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE;
-static const uint8_t REQTYPE_IN = LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE;
+/* Cast to int, C++20 deprecates | between two different enum types */
+static const uint8_t REQTYPE_OUT = (int)LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE;
+static const uint8_t REQTYPE_IN = (int)LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE;
 
 /**
  * @brief: Read a little endian 16 bit value.
