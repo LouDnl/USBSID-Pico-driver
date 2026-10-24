@@ -1,0 +1,71 @@
+name: C/C++ driver tagged build
+
+# Tag d<date> (e.g. d20261024) publishes a snapshot of the C/C++ driver: the
+# same source archives as an official release, attached as a prerelease that
+# is never marked latest. Not v*: that is release-native.yml. Not java-v*: the
+# Java driver has its own tags and workflow, see release-java.yml.
+
+on:
+  push:
+    tags:
+      - 'd[0-9]*'   # a date, d20261024 and so on
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The same platform builds and tests release-native.yml gates on. Its own
+  # source archive packaging lives in its release job (v* tags only), so it
+  # is not run here; the publish job below packages instead.
+  build:
+    name: Build
+    uses: ./.github/workflows/build-native.yml
+
+  publish_release:
+    name: Publish tagged build
+    runs-on: ubuntu-latest
+    needs: build
+    # job will only start if there is a new d tag
+    if: startsWith(github.ref, 'refs/tags/d')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set tag name
+        id: vars
+        run: |
+          echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Package source archives
+        run: bash test/ci/package.sh native "${{ steps.vars.outputs.tag }}" release
+
+      - name: Generate release notes
+        env:
+          SOURCE_TAG: ${{ steps.vars.outputs.tag }}
+        run: |
+          echo "**Commits in this tagged build:**" > release_notes.md
+          # The tag before this one, Java tags included, or the whole history the first time round
+          PREV=$(git tag --sort=-version:refname | grep -vx "$SOURCE_TAG" | head -n 1 || true)
+          if [ -n "$PREV" ]; then
+            git log "$PREV..HEAD" --oneline -- src libusbsiddrv-vice >> release_notes.md
+          else
+            git log --oneline -- src libusbsiddrv-vice >> release_notes.md
+          fi
+          cat release_notes.md
+
+      - name: Create tagged build release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.vars.outputs.tag }}
+          name: ${{ steps.vars.outputs.tag }} snapshot
+          bodyFile: release_notes.md
+          artifacts: 'release/*.tar.gz,release/*.zip,release/SHA256SUMS'
+          prerelease: true
+          makeLatest: false
+          allowUpdates: true
+          removeArtifacts: true
