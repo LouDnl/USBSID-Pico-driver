@@ -175,7 +175,7 @@ native:macos15-intel:
 # MSYS2 through choco, like the player. The runner shell is PowerShell, so
 # the bash part is written to a file and run through the msys2 login shell.
 # CHERE_INVOKING keeps that shell in the project directory, MSYSTEM (a matrix
-# variable) selects the MINGW64 or CLANG64 environment.
+# variable) selects the UCRT64 or CLANG64 environment.
 native:windows:
   extends: .rules_native
   stage: build
@@ -184,8 +184,8 @@ native:windows:
   parallel:
     matrix:
       - TARGET: [src, vice]
-        MSYSTEM: MINGW64
-        PKG_PREFIX: mingw-w64-x86_64
+        MSYSTEM: UCRT64
+        PKG_PREFIX: mingw-w64-ucrt-x86_64
         CC: gcc
         CXX: g++
       - TARGET: [src, vice]
