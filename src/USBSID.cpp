@@ -1833,7 +1833,7 @@ void USBSID_Class::USBSID_SendThreadBuffer(void)
     struct timeval tv = {0, 500};  // 0.5 ms
     libusb_handle_events_timeout_completed(ctx, &tv, NULL);
   }
-  if (!transfer_out_pending && transfer_out != NULL) {  /* NULL after a failed transfer */
+  if (!transfer_out_pending && transfer_out != NULL) {  /* NULL after LIBUSB_StopTransfers() */
     memset(out_buffer, 0, len_out_buffer);
     memcpy(out_buffer, thread_buffer, len);
     transfer_out_pending = true;
@@ -2018,7 +2018,8 @@ void USBSID_Class::LIBUSB_CloseDevice(void)
     libusb_release_interface(devh, 1);
 
     rc = libusb_attach_kernel_driver(devh, 0);
-    if (rc < 0 && rc != LIBUSB_ERROR_NOT_FOUND) {
+    /* Device already gone after reboot (e.g. bootloader) is expected */
+    if (rc < 0 && rc != LIBUSB_ERROR_NOT_FOUND && rc != LIBUSB_ERROR_NO_DEVICE) {
       fprintf(stderr, "Attach error on interface 0: %s\n", libusb_error_name(rc));
     }
 #endif
@@ -2137,12 +2138,13 @@ int USBSID_Class::LIBUSB_ConfigureDevice(void)
  * @note The request is rounded up to whole LEN_IN_BUFFER units plus
  *       LEN_IN_XFER - LEN_IN_BUFFER bytes of room. On the CDC interface
  *       (Linux, Windows) both are 1 and the request stays len.
- * @note Vendor interface, macOS (LEN_IN_BUFFER 64, LEN_IN_XFER 128): it
- *       always answers with a full 64 byte packet. A shorter request ends in
- *       LIBUSB_ERROR_OVERFLOW and halts the endpoint, after which every read
- *       fails with LIBUSB_ERROR_PIPE until the halt is cleared. TinyUSB
- *       follows each full packet with a zero length packet, the extra room
- *       lets that packet end this transfer. Otherwise the next read receives
+ * @note Vendor interface, macOS (LEN_IN_BUFFER 64, LEN_IN_XFER 128): the
+ *       request must be at least the 64 byte max packet size. A shorter
+ *       request ends in LIBUSB_ERROR_OVERFLOW and halts the endpoint, after
+ *       which every read fails with LIBUSB_ERROR_PIPE until the halt is
+ *       cleared. Replies are n byte short packets that end the transfer, an
+ *       exact 64 byte reply is followed by a zero length packet, the extra
+ *       room lets that packet end this transfer. Otherwise the next read receives
  *       it and every later reply arrives one read late.
  *
  * @param buff destination, receives at most len bytes
@@ -2172,6 +2174,31 @@ int USBSID_Class::LIBUSB_ReadIn(unsigned char *buff, size_t len, int *actual_len
   if (got > 0 && buff != in) memcpy(buff, in, (size_t)got);
   *actual_length = got;
   return ret;
+}
+
+/**
+ * @brief Discard stale IN data left by an earlier host process
+ *
+ * @note Open and reconnect only, never during normal operation. Runs
+ *       synchronously before the async transfers and any command. Uses its
+ *       own short timeout because LIBUSB_TIMEOUT is 0 (infinite) on CDC.
+ *       Drains EP_IN_ADDR, the CDC IN endpoint or the vendor IN endpoint
+ *       on macOS.
+ */
+void USBSID_Class::LIBUSB_DrainIn(void)
+{
+  unsigned char junk[LEN_IN_XFER > 128 ? LEN_IN_XFER : 128];
+  for (int i = 0; i < 8; i++) {
+    int got = 0;
+    int ret = libusb_bulk_transfer(devh, EP_IN_ADDR, junk, (int)sizeof(junk), &got, 15);
+    if (ret == LIBUSB_ERROR_TIMEOUT) break;
+    if (ret == LIBUSB_ERROR_PIPE || ret == LIBUSB_ERROR_OVERFLOW) {
+      libusb_clear_halt(devh, EP_IN_ADDR);
+      continue;
+    }
+    if (ret != 0) break;  /* no device or other hard error */
+    USBDBG(stdout, "[USBSID] Drained %d stale IN bytes\n", got);
+  }
 }
 
 /**
@@ -2303,9 +2330,8 @@ void USBSID_Class::LIBUSB_StopTransfers(void)
 {
   USBDBG(stdout, "[USBSID] Stopping transfers\n");
 
-  /* Cancel regardless of the pending flags: libusb knows whether a transfer
-   * is in flight, 0 means it was and its callback is still due */
-  transfer_out_pending = transfer_in_pending = false;
+  /* Keep the pending flags, only the callbacks clear them. A transfer libusb
+   * already cancels (timeout) returns NOT_FOUND with its callback still due */
   if (transfer_out) {
     rc = libusb_cancel_transfer(transfer_out);
     if (rc == 0) {
@@ -2398,6 +2424,8 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
     goto out;
   }
 
+  LIBUSB_DrainIn();  /* before any async transfer or command */
+
   LIBUSB_InitOutBuffer();
   LIBUSB_InitInBuffer();
 
@@ -2452,59 +2480,63 @@ void LIBUSB_CALL USBSID_Class::usb_out(struct libusb_transfer *transfer)
 {
   USBSID_Class *self = (USBSID_Class *)transfer->user_data;
 
-  if (transfer->status != LIBUSB_TRANSFER_COMPLETED) {
-    if (self) self->rc = transfer->status;
-    if (transfer->status != LIBUSB_TRANSFER_CANCELLED) {
-      USBERR(stderr, "[USBSID] Warning: transfer out interrupted with status %d, %s: %s\n",
-        transfer->status, libusb_error_name(transfer->status), libusb_strerror((enum libusb_error)transfer->status));
-    }
-    const bool cancelled = transfer->status == LIBUSB_TRANSFER_CANCELLED;
+  if (self == NULL) {  /* Detached by LIBUSB_StopTransfers(), owned by nobody */
     libusb_free_transfer(transfer);
-    if (self) {
-      self->transfer_out = NULL;
-      self->transfer_out_pending = false;
-      if (!cancelled) {
-        /* Out transfer freed, later writes never reach the device */
-        self->out_failures = MAX_OUT_FAILURES;
-        self->LIBUSB_CheckLost(LIBUSB_ERROR_IO);
-      }
-    }
     return;
   }
 
-  if (self) self->out_failures = 0;
-  if (self && transfer->actual_length != self->len_out_buffer) {
+  /* Keep the transfer on error or cancel, a later write reuses it */
+  if (transfer->status != LIBUSB_TRANSFER_COMPLETED) {
+    self->rc = transfer->status;
+    if (transfer->status != LIBUSB_TRANSFER_CANCELLED) {
+      USBERR(stderr, "[USBSID] Warning: transfer out interrupted with status %d, %s: %s\n",
+        transfer->status, libusb_error_name(transfer->status), libusb_strerror((enum libusb_error)transfer->status));
+      self->out_failures++;
+      self->LIBUSB_CheckLost(transfer->status == LIBUSB_TRANSFER_NO_DEVICE ? LIBUSB_ERROR_NO_DEVICE : LIBUSB_ERROR_IO);
+    }
+    self->transfer_out_pending = false;
+    return;
+  }
+
+  self->out_failures = 0;
+
+  if (transfer->actual_length != self->len_out_buffer) {
     USBERR(stderr, "[USBSID] Sent data length %d is different from the defined buffer length: %d or actual length %d\n",
       transfer->length, self->len_out_buffer, transfer->actual_length);
   }
-  if (self) self->transfer_out_pending = false;
+  self->transfer_out_pending = false;
 }
 
 void LIBUSB_CALL USBSID_Class::usb_in(struct libusb_transfer *transfer)
 {
   USBSID_Class *self = (USBSID_Class *)transfer->user_data;
 
-  if (transfer->status != LIBUSB_TRANSFER_COMPLETED) {
-    if (self) self->rc = transfer->status;
-    if (transfer->status != LIBUSB_TRANSFER_CANCELLED) {
-      USBERR(stderr, "[USBSID] Warning: transfer in interrupted with status '%s'\n",
-        libusb_error_name(transfer->status));
-      if (self && transfer->status == LIBUSB_TRANSFER_NO_DEVICE) {
-        self->LIBUSB_CheckLost(LIBUSB_ERROR_NO_DEVICE);
-      }
-    }
+  if (self == NULL) {  /* Detached by LIBUSB_StopTransfers(), owned by nobody */
     libusb_free_transfer(transfer);
-    if (self) {
-      self->transfer_in = NULL;
-      self->transfer_in_pending = false;
-    }
     return;
   }
 
-  if (self && transfer->actual_length > 0) {
+  /* Keep the transfer on error or cancel, a later read reuses it */
+  if (transfer->status != LIBUSB_TRANSFER_COMPLETED) {
+    self->rc = transfer->status;
+    if (transfer->status != LIBUSB_TRANSFER_CANCELLED) {
+      USBERR(stderr, "[USBSID] Warning: transfer in interrupted with status '%s'\n",
+        libusb_error_name(transfer->status));
+      if (transfer->status == LIBUSB_TRANSFER_NO_DEVICE) {
+        self->LIBUSB_CheckLost(LIBUSB_ERROR_NO_DEVICE);
+      }
+    }
+    self->transfer_in_pending = false;
+    return;
+  }
+
+  if (transfer->actual_length > 0) {
     memcpy(self->result, self->in_buffer, 1);
   }
 
+  self->read_completed = 1;
+  self->transfer_in_pending = false;
+}
 
 #ifdef USBSID_SID_STREAM
 void LIBUSB_CALL USBSID_Class::usb_stream_in(struct libusb_transfer *transfer)

@@ -151,11 +151,11 @@ namespace USBSID_NS
     EP_OUT_ADDR    = 0x02,
     EP_IN_ADDR     = 0x82,
     LEN_IN_BUFFER  = 1,   /* CDC replies carry only the requested bytes */
-    LEN_IN_XFER    = 1,   /* no trailing zero length packet on CDC */
+    LEN_IN_XFER    = 1,   /* CDC sends a zero length packet after an exact multiple of 64 bytes, short replies get none */
 #else
     EP_OUT_ADDR    = 0x04,
     EP_IN_ADDR     = 0x84,
-    LEN_IN_BUFFER  = 64,  /* macOS overflows on a request shorter than the 64 byte reply, see LIBUSB_ReadIn() */
+    LEN_IN_BUFFER  = 64,  /* macOS overflows on a request shorter than the 64 byte max packet size, see LIBUSB_ReadIn() */
     LEN_IN_XFER    = 128, /* reply packet plus room for the zero length packet that follows it */
 #endif
     LEN_OUT_BUFFER = 64,
@@ -499,6 +499,7 @@ namespace USBSID_NS
       int LIBUSB_DetachKernelDriver(void);
       int LIBUSB_ConfigureDevice(void);
       int LIBUSB_ReadIn(unsigned char *buff, size_t len, int *actual_length);
+      void LIBUSB_DrainIn(void);
       void LIBUSB_CancelIn(void);
       void LIBUSB_CheckLost(int error);
       void LIBUSB_InitOutBuffer(void);
