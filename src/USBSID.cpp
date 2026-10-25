@@ -62,10 +62,9 @@ static inline void us_free(void* m)
 }
 
 /**
- * @brief: Read the USB port path of a device.
+ * @brief Return the USB port path from root hub to device, empty on failure
  *
- * @param dev: libusb device
- * @return: port numbers from root hub to device, empty on failure
+ * @param dev libusb device
  */
 static std::vector<uint8_t> us_port_path(libusb_device *dev)
 {
@@ -77,9 +76,7 @@ static std::vector<uint8_t> us_port_path(libusb_device *dev)
 }
 
 /**
- * @brief: Order devices by bus, then port path.
- *
- * @return: true if a sorts before b
+ * @brief Order devices by bus, then port path, return true if a sorts before b
  */
 static bool us_port_less(uint8_t bus_a, const std::vector<uint8_t> &path_a,
                          uint8_t bus_b, const std::vector<uint8_t> &path_b)
@@ -120,7 +117,7 @@ USBSID_Class::~USBSID_Class()
   thread_buffer = NULL;
   write_buffer = NULL;
   result = NULL;
-  /* Destroy here, a thread restart after StopThread() locks it again */
+  /* Destroy in this function, a thread restart after StopThread() locks it again */
   pthread_mutex_destroy(&us_mutex);
   pthread_cond_destroy(&us_cond);
 #ifdef USBSID_SID_STREAM
@@ -162,7 +159,7 @@ int USBSID_Class::USBSID_Init(bool start_threaded, bool with_cycles)
 int USBSID_Class::USBSID_Close(void)
 {
   if (!us_PortIsOpen) return 0;
-  /* Always exit: a transfer error leaves rc < 0 with the device still open */
+  /* Always exit, a transfer error leaves rc < 0 with the device still open */
   int e = LIBUSB_Exit();
   if (rc != -1) USBERR(stderr, "Expected rc == -1, received: %d\n", rc);
   if (e != 0) USBERR(stderr, "Expected e == 0, received: %d\n", e);
@@ -222,9 +219,8 @@ void USBSID_Class::USBSID_UnMute(void)
 
 void USBSID_Class::USBSID_SetMuted(bool muted)
 { /* Argument 1 in the MUTE/UNMUTE command sets the firmware's muted state, which
-   * masks every later volume register write until unmuted.
-   * USBSID_Mute() sends
-   * 0 and only zeroes the volume once, the next volume write is audible again. */
+   * masks all following volume register writes until unmuted
+   * USBSID_Mute() sends 0 and zeroes the volume once, a following volume write is audible again */
   if (!us_PortIsOpen) return;
   USBDBG(stdout, "[USBSID] SetMuted %d\n", muted);
   unsigned char buff[3] = {(unsigned char)(COMMAND << 6 | (muted ? MUTE : UNMUTE)), 0x1, 0x0};
@@ -266,8 +262,8 @@ void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles, bool suspend_sids)
 }
 
 void USBSID_Class::USBSID_SetClockRate(long clockrate_cycles, bool suspend_sids, bool force)
-{ /* `force` sends the command regardless of the known board rate, for callers
-   * that switch rates during use (e.g. a tracker changing PAL/NTSC per tune) */
+{ /* force sends the command, also when the board rate is known
+   * Used when switching rates during use (e.g. a tracker changing PAL/NTSC per tune) */
   if (!us_PortIsOpen) return;
   for (uint8_t i = 0; i < (sizeof(clockSpeed) / sizeof(clockSpeed[0])); i++) {
     if (clockSpeed[i] == clockrate_cycles) {
@@ -550,24 +546,23 @@ unsigned char USBSID_Class::USBSID_SingleRead(uint8_t reg)
 }
 
 /**
- * @brief: Read n registers in one round trip (batch READ, byte count n)
+ * @brief Read n registers in one round trip (batch READ), returns n or -1 on failure
  *
- * @note Firmware reads the registers back to back in the given order.
- *       Not ordered with ringbuffer writes queued by the driver thread.
- * @note Firmware older than US_FW_VERSION_BATCH_READ gets n x USBSID_SingleRead().
- *       A short reply falls back to USBSID_SingleRead() for the remainder.
+ * Registers are read back to back in the given order
+ * Order against queued ringbuffer writes of the driver thread is undefined
+ * Older firmware (below US_FW_VERSION_BATCH_READ) gets n x USBSID_SingleRead()
+ * A short reply falls back to USBSID_SingleRead() for the remainder
  *
- * @param regs: n register addresses, SID local addressing as for SingleRead
- * @param out: receives n values
- * @param n: register count, 1-63
- * @return: n, -1 on failure
+ * @param regs n register addresses, SID local addressing as for SingleRead
+ * @param out Receives n values
+ * @param n Register count, 1-63
  */
 int USBSID_Class::USBSID_ReadMulti(const uint8_t *regs, uint8_t *out, int n)
 {
   if (!us_PortIsOpen || regs == NULL || out == NULL) return -1;
   if (n < 1 || n > (LEN_OUT_BUFFER - 1)) return -1;
   const int fv = USBSID_GetFirmwareVersionInt();
-  if (fv < US_FW_VERSION_BATCH_READ) {  /* Firmware without batch read, or version unknown (-1) */
+  if (fv < US_FW_VERSION_BATCH_READ) {  /* Firmware lacks batch read or version unknown (-1) */
     for (int i = 0; i < n; i++) out[i] = USBSID_SingleRead(regs[i]);
     return n;
   }
@@ -629,11 +624,10 @@ int USBSID_Class::USBSID_ReadConfig(unsigned char *buff, size_t len)
 /* COMMAND CHANNEL */
 
 /**
- * @brief: Send raw command bytes with one synchronous bulk transfer.
+ * @brief Send raw command bytes with one synchronous bulk transfer, returns bytes sent or -1
  *
- * @param buff: bytes to send
- * @param len: number of bytes
- * @return: bytes sent, -1 on failure
+ * @param buff Bytes to send
+ * @param len Number of bytes
  */
 int USBSID_Class::USBSID_SendCommand(const unsigned char *buff, size_t len)
 {
@@ -651,11 +645,10 @@ int USBSID_Class::USBSID_SendCommand(const unsigned char *buff, size_t len)
 }
 
 /**
- * @brief: Read one reply with a synchronous bulk transfer.
+ * @brief Read one reply with a synchronous bulk transfer, returns bytes read or -1 on failure or timeout
  *
- * @param buff: destination, receives at most len bytes
- * @param len: maximum number of bytes
- * @return: bytes read, -1 on failure or timeout
+ * @param buff Destination, receives at most len bytes
+ * @param len Maximum number of bytes
  */
 int USBSID_Class::USBSID_ReadResponse(unsigned char *buff, size_t len)
 {
@@ -671,14 +664,13 @@ int USBSID_Class::USBSID_ReadResponse(unsigned char *buff, size_t len)
 }
 
 /**
- * @brief: Send a 6 byte config command.
+ * @brief Send a 6 byte config command, returns bytes sent or -1
  *
- * @param sub: config sub command, byte 1
- * @param a: byte 2
- * @param b: byte 3
- * @param c: byte 4
- * @param d: byte 5
- * @return: bytes sent, -1 on failure
+ * @param sub Config sub command, byte 1
+ * @param a Byte 2
+ * @param b Byte 3
+ * @param c Byte 4
+ * @param d Byte 5
  */
 int USBSID_Class::USBSID_SendConfig(uint8_t sub, uint8_t a, uint8_t b, uint8_t c, uint8_t d)
 {
@@ -687,9 +679,7 @@ int USBSID_Class::USBSID_SendConfig(uint8_t sub, uint8_t a, uint8_t b, uint8_t c
 }
 
 /**
- * @brief: Read the firmware feature bitmask (US_FEATURE_*), once per open.
- *
- * @return: bitmask, -1 on failure
+ * @brief Read the firmware feature bitmask (US_FEATURE_*) once per open, returns -1 on failure
  */
 int USBSID_Class::USBSID_GetFeatures(void)
 {
@@ -703,11 +693,9 @@ int USBSID_Class::USBSID_GetFeatures(void)
 }
 
 /**
- * @brief: Read the firmware version integer (e.g. 81 for 0.8.1), once per open.
+ * @brief Read the firmware version integer (e.g. 81 for 0.8.1) once per open, returns -1 on failure
  *
- * @note Sends USBSID_VERSION with byte 2 set, new firmware replies one byte, old firmware the 64 byte string reply.
- *
- * @return: version integer, -1 on failure
+ * Sends USBSID_VERSION with byte 2 set, new firmware replies one byte, old firmware the 64 byte string
  */
 int USBSID_Class::USBSID_GetFirmwareVersionInt(void)
 {
@@ -717,12 +705,11 @@ int USBSID_Class::USBSID_GetFirmwareVersionInt(void)
   unsigned char reply[64] = {0};  /* Old firmware answers with the 64 byte version string reply */
   const int got = USBSID_ReadResponse(reply, sizeof(reply));
   if (got < 1) return -1;
-  /* Rule: reply byte 0 == 0x80 with byte 1 != 0 (or more than one byte) is the
-   * old string reply (byte 1 = string length), never a single byte integer
-   * version. Treat it as firmware older than US_FW_VERSION_BATCH_READ. The
-   * string "0.7.1" is parsed to 71 like the firmware CMake does (dots dropped,
-   * leading zeros stripped), 0 when it holds no digits. */
-  if (got > 1 || (reply[0] == USBSID_VERSION && reply[1] != 0)) {  /* reply[] is zeroed, so got == 1 reads reply[1] == 0 */
+  /* Reply byte 0 == 0x80 with byte 1 != 0 (or more than one byte) is the old string reply
+   * (byte 1 = string length) and means firmware older than US_FW_VERSION_BATCH_READ
+   * The string "0.7.1" is parsed to 71 like the firmware CMake does (dots dropped,
+   * leading zeros stripped), 0 when it holds no digits */
+  if (got > 1 || (reply[0] == USBSID_VERSION && reply[1] != 0)) {  /* reply[] is zeroed, got == 1 reads reply[1] == 0 */
     int v = 0;
     const int slen = (got > 2) ? (reply[1] < got - 2 ? reply[1] : got - 2) : 0;
     for (int i = 0; i < slen; i++) {
@@ -738,15 +725,14 @@ int USBSID_Class::USBSID_GetFirmwareVersionInt(void)
 }
 
 /**
- * @brief: Upload a tune to the onboard emulator.
+ * @brief Upload a tune to the onboard emulator, returns data bytes sent or -1 on failure
  *
  * Sends UPLOAD_SID_START, the data in 62 byte UPLOAD_SID_DATA packets,
- * UPLOAD_SID_END and UPLOAD_SID_SIZE, every packet 64 bytes.
+ * UPLOAD_SID_END and UPLOAD_SID_SIZE, 64 bytes per packet
  *
- * @param data: file contents
- * @param len: file size in bytes
- * @param filetype: UPLOAD_FILE_SID, UPLOAD_FILE_PRG or UPLOAD_FILE_STDIN
- * @return: data bytes sent, -1 on failure
+ * @param data file contents
+ * @param len file size in bytes
+ * @param filetype UPLOAD_FILE_SID, UPLOAD_FILE_PRG or UPLOAD_FILE_STDIN
  */
 int USBSID_Class::USBSID_UploadTune(const uint8_t *data, size_t len, uint8_t filetype)
 {
@@ -784,10 +770,9 @@ int USBSID_Class::USBSID_UploadTune(const uint8_t *data, size_t len, uint8_t fil
 }
 
 /**
- * @brief: Set the max play time of the uploaded tune.
+ * @brief Set the max play time of the uploaded tune, returns bytes sent or -1 on failure
  *
- * @param ms: play time in milliseconds
- * @return: bytes sent, -1 on failure
+ * @param ms play time in milliseconds
  */
 int USBSID_Class::USBSID_PlayerSetPlaytime(uint32_t ms)
 {
@@ -797,10 +782,9 @@ int USBSID_Class::USBSID_PlayerSetPlaytime(uint32_t ms)
 }
 
 /**
- * @brief: Load the uploaded tune and start it.
+ * @brief Load the uploaded tune and start it, returns bytes sent or -1 on failure
  *
- * @param subtune: 0 based subtune
- * @return: bytes sent, -1 on failure
+ * @param subtune 0 based subtune
  */
 int USBSID_Class::USBSID_PlayerLoad(uint8_t subtune)
 {
@@ -808,10 +792,9 @@ int USBSID_Class::USBSID_PlayerLoad(uint8_t subtune)
 }
 
 /**
- * @brief: Send a parameterless player command.
+ * @brief Send a parameterless player command, returns bytes sent or -1 on failure
  *
- * @param cmd: SID_PLAYER_START, STOP, PAUSE, NEXT, PREV or TWO
- * @return: bytes sent, -1 on failure
+ * @param cmd SID_PLAYER_START, STOP, PAUSE, NEXT, PREV or TWO
  */
 int USBSID_Class::USBSID_PlayerCommand(uint8_t cmd)
 {
@@ -819,12 +802,11 @@ int USBSID_Class::USBSID_PlayerCommand(uint8_t cmd)
 }
 
 /**
- * @brief: Mute or unmute a chip or voice of the onboard player.
+ * @brief Mute or unmute a chip or voice of the onboard player, returns bytes sent or -1 on failure
  *
- * @param chip: 1-4, 0 for all chips (voice must be 0)
- * @param voice: 1-3, 0 for the whole chip
- * @param mute: true to mute
- * @return: bytes sent, -1 on failure
+ * @param chip 1-4, 0 for all chips (voice must be 0)
+ * @param voice 1-3, 0 for the whole chip
+ * @param mute true to mute
  */
 int USBSID_Class::USBSID_PlayerMute(uint8_t chip, uint8_t voice, bool mute)
 {
@@ -832,9 +814,7 @@ int USBSID_Class::USBSID_PlayerMute(uint8_t chip, uint8_t voice, bool mute)
 }
 
 /**
- * @brief: Read the play time of the current onboard tune.
- *
- * @return: milliseconds, -1 on failure
+ * @brief Read the play time of the current onboard tune, returns milliseconds or -1 on failure
  */
 long USBSID_Class::USBSID_PlayerTime(void)
 {
@@ -846,10 +826,9 @@ long USBSID_Class::USBSID_PlayerTime(void)
 }
 
 /**
- * @brief: Read the onboard player mute state.
+ * @brief Read the onboard player mute state, returns true if state holds a valid reply
  *
- * @param state: 5 byte destination, chip mask then voice masks of chips 1-4
- * @return: true if state holds a valid reply
+ * @param state 5 byte destination, chip mask then voice masks of chips 1-4
  */
 bool USBSID_Class::USBSID_PlayerMuted(uint8_t state[5])
 {
@@ -994,7 +973,7 @@ unsigned char USBSID_Class::USBSID_Read(uint8_t reg)
         rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
       return 0xFF;
     }
-    /* now out buffer */
+    /* out buffer */
     memcpy(out_buffer, rw_buff, 2);
     transfer_out_pending = true;
     rc = libusb_submit_transfer(transfer_out);
@@ -1034,7 +1013,7 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff)
         rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
       return 0xFF;
     }
-    /* now out buffer */
+    /* out buffer */
     writebuff[0] = (READ << 6);
     memcpy(out_buffer, writebuff, 3);
     transfer_out_pending = true;
@@ -1075,7 +1054,7 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff, uint16_t cycle
         rc, libusb_error_name(rc), libusb_strerror((enum libusb_error)rc));
       return 0xFF;
     }
-    /* now out buffer */
+    /* out buffer */
     writebuff[0] = (READ << 6);
     memcpy(out_buffer, writebuff, 3);
     transfer_out_pending = true;
@@ -1104,18 +1083,17 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff, uint16_t cycle
 #ifdef USBSID_SID_STREAM
 
 /**
- * @brief: Start the SID memory stream on the stream interface
+ * @brief Start the SID memory stream on the stream interface, returns 0 or -1 on failure
  *
  * Claims STREAM_ITF, submits STREAM_TRANSFERS persistent IN transfers, starts
  * the stream event thread and sends STREAM_REQ_START. A running stream is
- * restarted with the new settings, the cache starts empty.
+ * restarted with the new settings and an empty cache
  *
- * @note Reads US_FEATURES first: firmware without the SID stream
- *       (US_FEATURE_SIDSTREAM) returns -1 and the driver works as before.
+ * Reads US_FEATURES first, firmware lacking the SID stream
+ * (US_FEATURE_SIDSTREAM) returns -1
  *
- * @param rate_hz: 50, 60, 250, 500 or 1000, 0 for the firmware default (50)
- * @param sid_mask: bit n = SID n+1, 0 for all configured SIDs
- * @return: 0, -1 on failure
+ * @param rate_hz 50, 60, 250, 500 or 1000, 0 for the firmware default (50)
+ * @param sid_mask bit n = SID n+1, 0 for all configured SIDs
  */
 int USBSID_Class::USBSID_StreamStart(int rate_hz, uint8_t sid_mask)
 {
@@ -1137,7 +1115,7 @@ int USBSID_Class::USBSID_StreamStart(int rate_hz, uint8_t sid_mask)
     USBSID_StreamStop();
     return -1;
   }
-  /* START increments the firmware session, frames of older sessions are dropped */
+  /* START increments the firmware session id, frames of older ids are dropped */
   stream_session = (info[10] + 1) & 0xFF;
   stream_errors = 0;
   for (int i = 0; i < 128; i++) stream_regs[i].store(0, std::memory_order_relaxed);
@@ -1201,11 +1179,9 @@ int USBSID_Class::USBSID_StreamStart(int rate_hz, uint8_t sid_mask)
 }
 
 /**
- * @brief: Stop the stream, cancel its transfers, release the interface
+ * @brief Stop the stream, cancel its transfers, release the interface, returns 0
  *
- * @note Safe to call without a running stream
- *
- * @return: 0
+ * Safe to call when no stream runs
  */
 int USBSID_Class::USBSID_StreamStop(void)
 {
@@ -1262,9 +1238,7 @@ int USBSID_Class::USBSID_StreamStop(void)
 }
 
 /**
- * @brief: Check whether the stream delivers frames
- *
- * @return: true when started and at least one IN transfer is alive
+ * @brief Check whether the stream delivers frames, returns true when started and at least one IN transfer is alive
  */
 bool USBSID_Class::USBSID_StreamRunning(void)
 {
@@ -1276,14 +1250,13 @@ bool USBSID_Class::USBSID_StreamRunning(void)
 }
 
 /**
- * @brief: Read the firmware stream state (STREAM_REQ_INFO)
+ * @brief Read the firmware stream state (STREAM_REQ_INFO), returns 0 or -1 on failure or firmware lacking the stream
  *
  * [0] format version, [1] frame size, [2-3] max rate LE, [4] SID count,
  * [5] bit 0 running, [6-7] rate LE, [8] active SID mask, [9] reserved,
- * [10] session, [12-15] frames dropped LE
+ * [10] session id, [12-15] frames dropped LE
  *
- * @param info: receives STREAM_INFO_LEN bytes
- * @return: 0, -1 on failure or firmware without the stream
+ * @param info receives STREAM_INFO_LEN bytes
  */
 int USBSID_Class::USBSID_StreamQuery(uint8_t info[STREAM_INFO_LEN])
 {
@@ -1300,14 +1273,12 @@ int USBSID_Class::USBSID_StreamQuery(uint8_t info[STREAM_INFO_LEN])
 }
 
 /**
- * @brief: Last streamed value of a register, no USB traffic
+ * @brief Last streamed value of a register, no USB traffic, returns 0-255, -1 when no frame of that SID arrived yet
  *
- * @note $00-$18 mirror the last written value (a clone's also the last
- *       read value), $19-$1C the last read value. Age:
- *       USBSID_GetStreamState()
+ * $00-$18 hold the last written value (clone chips also the last read value)
+ * $19-$1C hold the last read value, age is in USBSID_GetStreamState()
  *
- * @param reg: register, bits 5-6 select the SID as for USBSID_Write()
- * @return: 0-255, -1 when no frame of that SID arrived yet
+ * @param reg register, bits 5-6 select the SID as for USBSID_Write()
  */
 int USBSID_Class::USBSID_ReadCached(uint8_t reg)
 {
@@ -1316,12 +1287,11 @@ int USBSID_Class::USBSID_ReadCached(uint8_t reg)
 }
 
 /**
- * @brief: Copy the streamed registers of all 4 SIDs
+ * @brief Copy the streamed registers of all 4 SIDs, returns bit n set for each SID n with data, -1 for a NULL out
  *
- * @note Registers of one SID can mix two consecutive frames
+ * Registers of one SID can mix two consecutive frames
  *
- * @param out: receives 128 bytes, SID n at n * 32, 0 for SIDs without data
- * @return: bit n set for each SID n with data, -1 for a NULL out
+ * @param out receives 128 bytes, SID n at n * 32, 0 for SIDs with no data
  */
 int USBSID_Class::USBSID_GetSidMemory(uint8_t out[128])
 {
@@ -1335,11 +1305,10 @@ int USBSID_Class::USBSID_GetSidMemory(uint8_t out[128])
 }
 
 /**
- * @brief: Info of the latest frame of one SID
+ * @brief Info of the latest frame of one SID, returns false for an invalid sid or a NULL state
  *
- * @param sid: SID 0-3 of this board
- * @param state: receives the frame info, frames 0 without data
- * @return: false for an invalid sid or a NULL state
+ * @param sid SID 0-3 of this board
+ * @param state receives the frame info, frames 0 when no data
  */
 bool USBSID_Class::USBSID_GetStreamState(int sid, USBSID_StreamState *state)
 {
@@ -1353,10 +1322,10 @@ bool USBSID_Class::USBSID_GetStreamState(int sid, USBSID_StreamState *state)
 }
 
 /**
- * @brief: Set the raw frame callback
+ * @brief Set the raw frame callback
  *
- * @param cb: called with every accepted frame in the stream event thread, NULL to remove
- * @param user: passed to cb
+ * @param cb called for each accepted frame in the stream event thread, NULL to remove
+ * @param user passed to cb
  */
 void USBSID_Class::USBSID_SetStreamCallback(USBSID_StreamCallback cb, void *user)
 {
@@ -1367,15 +1336,15 @@ void USBSID_Class::USBSID_SetStreamCallback(USBSID_StreamCallback cb, void *user
 }
 
 /**
- * @brief: Store one received frame in the cache, call the frame callback
+ * @brief Store one received frame in the cache, call the frame callback
  *
- * @param f: frame
- * @param len: received length
+ * @param f frame
+ * @param len received length
  */
 void USBSID_Class::USBSID_StreamFrame(const uint8_t *f, int len)
 {
   if (len != STREAM_FRAME_SIZE || f[0] != STREAM_FRAME_SID) return;
-  if ((int)f[48] != stream_session) return;  /* Older session or not started */
+  if ((int)f[48] != stream_session) return;  /* Older session id or not started */
   const int sid = f[1] & 0x03;
   for (int r = 0; r < 32; r++) {
     stream_regs[sid * 32 + r].store(f[12 + r], std::memory_order_relaxed);
@@ -1391,9 +1360,9 @@ void USBSID_Class::USBSID_StreamFrame(const uint8_t *f, int len)
 }
 
 /**
- * @brief: Stream event thread, handles libusb events while the stream runs
+ * @brief Stream event thread, handles libusb events while the stream runs
  *
- * @note Also completes the driver's own async transfers while it runs
+ * Completes the async transfers of the driver while it runs
  */
 void* USBSID_Class::USBSID_StreamThread(void)
 {
@@ -1434,15 +1403,10 @@ void* USBSID_Class::USBSID_Thread(void)
         USBSID_RingPop();
       }
     }
-    /* CPU + latency fix built around RingPut.
-     * Any call to RingPut is now done inside us_mutex and signals us_cond
-     * just before unlocking the mutex which wakes up this thread when new
-     * data is put into the ring instead of constantly polling the ringbuffer
-     * and causing cpu->thread hike with multiple boards connected.
-     * The timeout is just a safety net incase of a missed wakeup and not
-     * the real wake mechanism, so its exact value is not latency-critical.
-     * USBSID_SendThreadBuffer() releases us_mutex during USB I/O, a
-     * producer never waits on a transfer. */
+    /* RingPut runs inside us_mutex and signals us_cond before unlocking
+     * This wakes the thread when new data is put into the ring
+     * The timeout is a safety net for a missed wakeup
+     * USBSID_SendThreadBuffer() releases us_mutex during USB I/O */
     if (run_thread == 1
         && flush_buffer != 1  /* Rest of a flush still to send */
         && !((us_ringbuffer.ring_read != us_ringbuffer.ring_write)
@@ -1632,10 +1596,9 @@ void USBSID_Class::USBSID_RestartRingBuffer(void)
 }
 
 int USBSID_Class::USBSID_RingFree(void)
-{ /* The ringbuffer has no overflow protection, a producer that writes faster
-   * than the thread sends overwrites unsent data. This lets the caller apply
-   * backpressure. Read without the lock, so an estimate. One slot always stays
-   * unused to tell a full ring from an empty one. */
+{ /* The ringbuffer has no overflow protection, writing faster than the thread
+   * sends overwrites unsent data, use this for backpressure
+   * Read without the lock, an estimate only. One slot stays unused */
   if (us_ringbuffer.is_allocated != 1) return 0;
   const int r = us_ringbuffer.ring_read;
   const int w = us_ringbuffer.ring_write;
@@ -1688,17 +1651,10 @@ void USBSID_Class::USBSID_FlushBuffer(void)
     return;
   }
 
-  /* The flush is a deadline, so whatever is still waiting in the ring belongs
-   * in this packet.
-   *
-   * this drains whatever is waiting in the ring on a flush deadline instead
-   * of leaving it to the thread's own diff_size-gated drain loop, which
-   * otherwise leaves writes sitting in the ring far longer than their caller
-   * intended.
-   *
-   * Runs on the driver thread, USBSID_Flush() only raises flush_buffer. More
-   * waiting than one packet holds keeps flush_buffer raised, the next thread
-   * loop sends the rest: a flush always empties the ring in full packets. */
+  /* A flush is a deadline, all that waits in the ring goes in this packet
+   * Runs on the driver thread, USBSID_Flush() only raises flush_buffer
+   * More waiting than one packet holds keeps flush_buffer raised and the
+   * following thread loop sends the rest */
   const int rec = (withcycles == 1) ? 4 : 2;
   const int cap = (withcycles == 1) ? 61 : 63;
   int waiting = (us_ringbuffer.ring_write - us_ringbuffer.ring_read
@@ -1718,7 +1674,7 @@ void USBSID_Class::USBSID_FlushBuffer(void)
       : (uint8_t)(WRITE << 6 | (buffer_pos - 1));
     flush_buffer = 0;
     USBSID_SendThreadBuffer();
-    /* Rest goes out on the next thread loop,
+    /* Rest goes out on the following thread loop,
        a flush raised during the send stays raised */
     if (waiting >= rec) flush_buffer = 1;
   } else {
@@ -1762,10 +1718,9 @@ void USBSID_Class::USBSID_WriteRingCycled(uint8_t reg, uint8_t val, uint16_t cyc
 }
 
 void USBSID_Class::USBSID_WriteRingCycledN(const uint8_t *items, int count)
-{ /* Batch variant of USBSID_WriteRingCycled(). `items` holds `count` writes of
-   * 4 bytes each: reg, val, cycles hi, cycles lo. The driver thread holds
-   * us_mutex while it sends, so one lock per batch keeps a producer from
-   * queueing behind the thread on every single write. */
+{ /* Batch variant of USBSID_WriteRingCycled(), items holds count writes of
+   * 4 bytes (reg, val, cycles hi, cycles lo)
+   * One lock per batch, the driver thread holds us_mutex while it sends */
   if (!us_PortIsOpen || items == NULL || count <= 0) return;
   if (threaded && withcycles) {
     pthread_mutex_lock(&us_mutex);
@@ -1791,7 +1746,7 @@ void USBSID_Class::USBSID_RingPopCycled(void)
   thread_buffer[buffer_pos++] = USBSID_RingGet();  /* n cycles low */
 
   if (flush_buffer == 1) {
-    /* Fill the packet from the ring before sending, not one write per packet */
+    /* Fill the packet from the ring before sending */
     USBSID_FlushBuffer();
   } else if (buffer_pos == 61  /* >= 61 || >= 4 */
       || buffer_pos == len_out_buffer) {
@@ -1813,7 +1768,7 @@ void USBSID_Class::USBSID_RingPop(void)
   thread_buffer[buffer_pos++] = USBSID_RingGet();  /* register */
   thread_buffer[buffer_pos++] = USBSID_RingGet();  /* value */
   if (flush_buffer == 1) {
-    /* Fill the packet from the ring before sending, not one write per packet */
+    /* Fill the packet from the ring before sending */
     USBSID_FlushBuffer();
   } else if (buffer_pos == 63  /* >= 61 || >= 4 */
     || buffer_pos == len_out_buffer) {
@@ -1824,9 +1779,9 @@ void USBSID_Class::USBSID_RingPop(void)
 }
 
 void USBSID_Class::USBSID_SendThreadBuffer(void)
-{ /* Driver thread only, us_mutex held on entry and on return. Release
-   * us_mutex during USB I/O, producers only wait on ring access.
-   * thread_buffer and out_buffer are only touched by the driver thread. */
+{ /* Driver thread only, us_mutex held on entry and on return
+   * us_mutex is released during USB I/O, producers only wait on ring access
+   * thread_buffer and out_buffer are only touched by the driver thread */
   const int len = buffer_pos;
   buffer_pos = 1;
   pthread_mutex_unlock(&us_mutex);
@@ -1857,8 +1812,8 @@ void USBSID_Class::USBSID_SendThreadBuffer(void)
 }
 
 void USBSID_Class::USBSID_WaitTransferOut(void)
-{ /* Driver thread only, us_mutex held on entry and on return. Block on
-   * libusb events with us_mutex released instead of spinning. */
+{ /* Driver thread only, us_mutex held on entry and on return
+   * Blocks on libusb events with us_mutex released */
   pthread_mutex_unlock(&us_mutex);
   struct timeval tv = {0, 500};  // 0.5 ms
   libusb_handle_events_timeout_completed(ctx, &tv, NULL);
@@ -1917,15 +1872,15 @@ int USBSID_Class::LIBUSB_OpenDevice(void)
   };
   std::vector<Candidate> candidates;
 
-  /* Find the target we want by serial and assign the index requested */
+  /* Find the target wanted by serial and assign the index requested */
   for (ssize_t i = 0; i < cnt; i++) {
     struct libusb_device_descriptor desc;
     if (libusb_get_device_descriptor(devs[i], &desc) < 0) continue;
     if (desc.idVendor != VENDOR_ID || desc.idProduct != PRODUCT_ID) continue;
 
     if (!want_serial.empty()) { /* If requested by serial number */
-      /* Reading a serial requires an open handle,
-       * probe each match and close again on a miss. */
+      /* Reading a serial requires an open handle
+       * Probe each match and close again on a miss */
       struct libusb_device_handle *probe = NULL;
       if (libusb_open(devs[i], &probe) == 0) {
         /* Read the serialnumber */
@@ -1935,14 +1890,14 @@ int USBSID_Class::LIBUSB_OpenDevice(void)
           int slen = libusb_get_string_descriptor_ascii(probe, desc.iSerialNumber, sbuf, sizeof(sbuf) - 1);
           if (slen > 0) serial.assign((char*)sbuf, slen);
         }
-        /* Is it the one we wanted? */
+        /* Is it the one wanted? */
         if (serial == want_serial) {
           devh = probe;
           opened_serial = serial;
           target = devs[i];
-          break; /* Break out of the loop if this is the one we wanted */
+          break; /* Break out of the loop if this is the one wanted */
         }
-        /* Close the device if not the one we wanted */
+        /* Close the device if not the one wanted */
         libusb_close(probe);
       }
     } else { /* If no serial given collect for index selection */
@@ -1979,7 +1934,7 @@ int USBSID_Class::LIBUSB_OpenDevice(void)
     }
   }
 
-  /* No errors? Then we can clear the device list */
+  /* No errors? Then clear the device list */
   libusb_free_device_list(devs, 1);
 
   /* Assign the serial number if still empty */
@@ -1992,9 +1947,9 @@ int USBSID_Class::LIBUSB_OpenDevice(void)
     }
   }
 
-  /* On macOS the IOKit CDC driver will reclaim interfaces unless we enable
-   * auto-detach, which makes libusb detach/reattach the kernel driver
-   * automatically around libusb_claim_interface / libusb_release_interface. */
+  /* On macOS the IOKit CDC driver reclaims interfaces unless auto-detach is enabled
+   * Auto-detach makes libusb detach/reattach the kernel driver
+   * around libusb_claim_interface / libusb_release_interface */
   rc = libusb_set_auto_detach_kernel_driver(devh, 1);
   if (rc == LIBUSB_ERROR_NOT_SUPPORTED) {
     rc = 0;
@@ -2121,7 +2076,7 @@ int USBSID_Class::LIBUSB_ConfigureDevice(void)
     return rc;
   }
 
-  /* set line encoding here, required but not used for CDC */
+  /* set line encoding, required but not used for CDC */
   rc = libusb_control_transfer(devh, 0x21, 0x20, 0, 0, encoding, sizeof(encoding), 1000);
   if (rc < 0 || rc != 7) {  /* should return 7 for the encoding size */
     USBERR(stderr, "[USBSID] Error configuring line encoding during control transfer: %d, %s: %s\n",
@@ -2134,24 +2089,23 @@ int USBSID_Class::LIBUSB_ConfigureDevice(void)
 }
 
 /**
- * @brief Bulk IN read of up to len bytes into buff
+ * @brief Bulk IN read of up to len bytes into buff, returns the libusb_bulk_transfer() result
  *
- * @note The request is rounded up to whole LEN_IN_BUFFER units plus
- *       LEN_IN_XFER - LEN_IN_BUFFER bytes of room. On the CDC interface
- *       (Linux, Windows) both are 1 and the request stays len.
- * @note Vendor interface, macOS (LEN_IN_BUFFER 64, LEN_IN_XFER 128): the
- *       request must be at least the 64 byte max packet size. A shorter
- *       request ends in LIBUSB_ERROR_OVERFLOW and halts the endpoint, after
- *       which every read fails with LIBUSB_ERROR_PIPE until the halt is
- *       cleared. Replies are n byte short packets that end the transfer, an
- *       exact 64 byte reply is followed by a zero length packet, the extra
- *       room lets that packet end this transfer. Otherwise the next read receives
- *       it and every later reply arrives one read late.
+ * The request is rounded up to a multiple of LEN_IN_BUFFER plus
+ * LEN_IN_XFER - LEN_IN_BUFFER bytes of room, on CDC (Linux, Windows)
+ * both are 1 and the request stays len
+ *
+ * Vendor interface on macOS (LEN_IN_BUFFER 64, LEN_IN_XFER 128):
+ * the request must be at least the 64 byte max packet size, a shorter
+ * request ends in LIBUSB_ERROR_OVERFLOW and halts the endpoint, all reads
+ * fail with LIBUSB_ERROR_PIPE until the halt is cleared
+ * An exact 64 byte reply is followed by a zero length packet, the extra
+ * room lets that packet end this transfer, else the following read gets it
+ * and all later replies arrive one read late
  *
  * @param buff destination, receives at most len bytes
- * @param len number of bytes the caller wants
+ * @param len number of bytes wanted
  * @param actual_length set to the number of bytes copied into buff
- * @return int libusb_bulk_transfer() result
  */
 int USBSID_Class::LIBUSB_ReadIn(unsigned char *buff, size_t len, int *actual_length)
 {
@@ -2168,7 +2122,7 @@ int USBSID_Class::LIBUSB_ReadIn(unsigned char *buff, size_t len, int *actual_len
   int got = 0;
   int ret = libusb_bulk_transfer(devh, EP_IN_ADDR, in, (int)req, &got, LIBUSB_TIMEOUT);
   if (ret == LIBUSB_ERROR_PIPE || ret == LIBUSB_ERROR_OVERFLOW) {
-    libusb_clear_halt(devh, EP_IN_ADDR);  /* keep the next read working */
+    libusb_clear_halt(devh, EP_IN_ADDR);  /* keep the following read working */
   }
   LIBUSB_CheckLost(ret);
   if (got > (int)len) got = (int)len;
@@ -2180,11 +2134,9 @@ int USBSID_Class::LIBUSB_ReadIn(unsigned char *buff, size_t len, int *actual_len
 /**
  * @brief Discard stale IN data left by an earlier host process
  *
- * @note Open and reconnect only, never during normal operation. Runs
- *       synchronously before the async transfers and any command. Uses its
- *       own short timeout because LIBUSB_TIMEOUT is 0 (infinite) on CDC.
- *       Drains EP_IN_ADDR, the CDC IN endpoint or the vendor IN endpoint
- *       on macOS.
+ * Open and reconnect only, runs synchronously before the async transfers
+ * and any command, short timeout (LIBUSB_TIMEOUT is 0 (infinite) on CDC)
+ * Drains EP_IN_ADDR, the CDC IN endpoint or the vendor IN endpoint on macOS
  */
 void USBSID_Class::LIBUSB_DrainIn(void)
 {
@@ -2205,8 +2157,8 @@ void USBSID_Class::LIBUSB_DrainIn(void)
 /**
  * @brief Cancel the pending async IN transfer and wait for its callback
  *
- * @note Bounded wait, the transfer stays pending on an unresponsive device
- *       and a later submit returns LIBUSB_ERROR_BUSY instead of crashing
+ * Bounded wait, on an unresponsive device the transfer stays pending
+ * and a later submit returns LIBUSB_ERROR_BUSY
  */
 void USBSID_Class::LIBUSB_CancelIn(void)
 {
@@ -2223,9 +2175,9 @@ void USBSID_Class::LIBUSB_CancelIn(void)
 }
 
 /**
- * @brief: Mark the device lost on a missing device or repeated out failures
+ * @brief Mark the device lost on a missing device or repeated out failures
  *
- * @param error: libusb error code or transfer status, negative for an error code
+ * @param error libusb error code or transfer status, negative for an error code
  */
 void USBSID_Class::LIBUSB_CheckLost(int error)
 {
@@ -2331,8 +2283,8 @@ void USBSID_Class::LIBUSB_StopTransfers(void)
 {
   USBDBG(stdout, "[USBSID] Stopping transfers\n");
 
-  /* Keep the pending flags, only the callbacks clear them. A transfer libusb
-   * already cancels (timeout) returns NOT_FOUND with its callback still due */
+  /* Keep the pending flags, only the callbacks clear them
+   * A transfer libusb cancels (timeout) returns NOT_FOUND with its callback still due */
   if (transfer_out) {
     rc = libusb_cancel_transfer(transfer_out);
     if (rc == 0) {
@@ -2361,8 +2313,8 @@ void USBSID_Class::LIBUSB_StopTransfers(void)
     libusb_handle_events_timeout_completed(ctx, &tv, NULL);
   }
 
-  /* A transfer still in flight stays allocated: libusb_close() walks the
-   * in-flight list and locks each transfer. Detach it from this instance. */
+  /* A transfer still in flight stays allocated, libusb_close() walks the
+   * in-flight list and locks each transfer. Detach it from this instance */
   if (transfer_out) {
     if (transfer_out_pending) {
       transfer_out->user_data = NULL;
@@ -2396,7 +2348,7 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
 
   /* Initialize libusb */
   rc = libusb_init(&ctx);
-  /* For LIBUSB version 1.0.27+ we could use this: */
+  /* For LIBUSB version 1.0.27+ this is possible: */
   // rc = libusb_init_context(&ctx, /*options=NULL, /*num_options=*/0);
   if (rc != 0) {
     USBERR(stderr, "[USBSID] Error initializing libusb: %d %s: %s\n",
@@ -2448,9 +2400,9 @@ out:
 
 int USBSID_Class::LIBUSB_Exit(void)
 {
-  /* Runs only when devh, not rc. a failed LIBUSB_Setup() or a transfer error
-   * leaves rc < 0 with the device still open and its interface claimed, which
-   * on MacOS locks the device for retries and for every other process */
+  /* Runs when devh is set, rc is not checked, a failed LIBUSB_Setup() or a transfer
+   * error leaves rc < 0 with the device open and its interface claimed, on MacOS
+   * that locks the device for retries and for all other processes */
   if (devh) {
 #ifdef USBSID_SID_STREAM
     USBSID_StreamStop();

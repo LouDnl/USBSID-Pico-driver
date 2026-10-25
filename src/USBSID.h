@@ -31,23 +31,23 @@
 /**
  * Compile time options (define on the compiler command line):
  *   USBSID_SID_STREAM  Build the SID register stream host API (USBSID_StreamStart,
- *                      USBSID_ReadCached, USBSID_GetSidMemory and the C wrappers).
- *                      Off by default, future use. Needs firmware built with
+ *                      USBSID_ReadCached, USBSID_GetSidMemory and the C wrappers)
+ *                      Off by default, future use, needs firmware built with
  *                      ENABLE_SID_STREAM (USE_SID_STREAM, USB interface 7,
- *                      US_FEATURES bit 6). Define it for every file that includes
- *                      the driver headers, not only for the driver sources.
- *   USE_VENDOR_ITF     Use the vendor interface instead of CDC (always on for macOS).
- *   USBSID_DEBUG       Debug output.
+ *                      US_FEATURES bit 6), define for all files that include
+ *                      the driver headers
+ *   USE_VENDOR_ITF     Use the vendor interface for CDC (always on for macOS)
+ *   USBSID_DEBUG       Debug output
  */
 
 #ifdef __APPLE__
 #undef HAVE_ALIGNED_ALLOC
 /**
  * For better compatibilty MacOs uses
- * the Vendor ITF instead of the CDC
- * ITF. From firmware v0.8.0+ both
+ * the Vendor ITF. From firmware
+ * v0.8.0+ both CDC and Vendor
  * interfaces handle incoming data
- * the same way.
+ * the same way
  */
 #define USE_VENDOR_ITF
 #define LIBUSB_TIMEOUT   1000
@@ -155,7 +155,7 @@ namespace USBSID_NS
 #else
     EP_OUT_ADDR    = 0x04,
     EP_IN_ADDR     = 0x84,
-    LEN_IN_BUFFER  = 64,  /* macOS overflows on a request shorter than the 64 byte max packet size, see LIBUSB_ReadIn() */
+    LEN_IN_BUFFER  = 64,  /* macOS overflows on a request shorter than the 64 byte max packet size */
     LEN_IN_XFER    = 128, /* reply packet plus room for the zero length packet that follows it */
 #endif
     LEN_OUT_BUFFER = 64,
@@ -253,7 +253,7 @@ namespace USBSID_NS
   enum {
     STREAM_ITF           = 7,     /* Vendor interface, claimed by USBSID_StreamStart() */
     STREAM_EP_IN         = 0x87,
-    STREAM_REQ_START     = 0x10,  /* Vendor control OUT, 4 bytes: rate LE, SID mask, 0 (byte 3 reserved) */
+    STREAM_REQ_START     = 0x10,  /* Vendor control OUT, 4 bytes ~ rate LE, SID mask, 0 (byte 3 reserved) */
     STREAM_REQ_STOP      = 0x11,  /* Vendor control OUT, no data */
     STREAM_REQ_INFO      = 0x12,  /* Vendor control IN, STREAM_INFO_LEN bytes */
     STREAM_INFO_LEN      = 16,
@@ -266,14 +266,14 @@ namespace USBSID_NS
 
   /* Latest stream frame of one SID, see USBSID_GetStreamState() */
   struct USBSID_StreamState {
-    uint32_t frames = 0;     /* Frames received since USBSID_StreamStart(), 0: no data */
+    uint32_t frames = 0;     /* Frames received after USBSID_StreamStart(), 0 = no data */
     uint16_t tick = 0;       /* Firmware tick sequence */
     uint8_t flags = 0;       /* STREAM_FLAG_* bits */
     uint32_t cycles = 0;     /* PHI1 cycle counter of the snapshot */
     uint32_t processed = 0;  /* Main interface packets the firmware processed */
   };
 
-  /* Raw frame callback, runs in the stream event thread: no USB I/O on this
+  /* Raw frame callback, runs in the stream event thread ~ no USB I/O on this
    * driver instance from inside it */
   typedef void (*USBSID_StreamCallback)(const uint8_t *frame, int len, void *user);
 #endif /* USBSID_SID_STREAM */
@@ -369,8 +369,7 @@ namespace USBSID_NS
 
   /* USBSID instance related */
 
-  /* Shared instance id counter for diagnostics only. Does not guard any connections
-   * or connection behaviours */
+  /* Instance id counter, diagnostics only */
   static std::atomic_int instance_counter{-1};
 
   /* Enumartion struct to hold information about detected physical boards */
@@ -392,17 +391,17 @@ namespace USBSID_NS
       bool us_Available = false;                     /* are you there? */
       bool us_PortIsOpen = false;                    /* open wide! */
 
-      /* Which physical board to open.
-       * For single-board like behaviour, open the first VID/PID match */
-      std::string want_serial;                       /* The one we want */
-      std::string opened_serial;                     /* The one we get */
-      int want_index = 0;                            /* The index we want */
+      /* Physical board to open
+       * Default opens the first VID/PID match */
+      std::string want_serial;                       /* The one wanted */
+      std::string opened_serial;                     /* The one obtained */
+      int want_index = 0;                            /* The index wanted */
 
       /* Timing related */
       double us_CPUcycleDuration;                    /* CPU cycle duration in nanoseconds */
       double us_InvCPUcycleDurationNanoSeconds;      /* Inverted CPU cycle duration in nanoseconds */
       timestamp_t m_StartTime;                       /* That moment when... */
-      timestamp_t m_LastTime;                        /* I know what you did last summer! */
+      timestamp_t m_LastTime;                        /* Knows what you did last summer! */
 
       /* Ringbuffer related */
       int diff_size = default_diff_size;             /* must init with something to work */
@@ -420,7 +419,7 @@ namespace USBSID_NS
       bool in_buffer_dma = false;                    /* is the in buffer DMA or not */
       bool out_buffer_dma = false;                   /* is the out buffer DMA or not */
 
-      bool threaded = false;                         /* are we threading the needle? */
+      bool threaded = false;                         /* threading the needle? */
       bool withcycles = false;                       /* with or without bicycles */
       int rc = -1;                                   /* to rc or not to rc, that is the question */
       int read_completed = 0;                        /* still not done? */
@@ -568,7 +567,7 @@ namespace USBSID_NS
                                bool suspend_sids);                             /* Assert SID RES signal while changing clockrate (Advised!)*/
       void USBSID_SetClockRate(long clockrate_cycles,                          /* Set CPU clockrate in Hertz */
                                bool suspend_sids,                              /* Assert SID RES signal while changing clockrate (Advised!)*/
-                               bool force);                                    /* Send the command even if the board is known to run at this rate */
+                               bool force);                                    /* Force send, also when the board runs at this rate */
       long USBSID_GetClockRate(void);                                          /* Get CPU clockrate in Hertz  */
       long USBSID_GetRefreshRate(void);                                        /* Get cycles per refresh rate */
       long USBSID_GetRasterRate(void);                                         /* Get cycles per raster rate */
@@ -584,14 +583,14 @@ namespace USBSID_NS
       void USBSID_ToggleStereo(void);                                          /* Toggle between mono and stereo ~ v1.3 PCB only */
 
       /* Synchronous direct */
-      void USBSID_SingleWrite(unsigned char *buff, size_t len);                /* Single write buffer of size_t ~ example: config writing */
+      void USBSID_SingleWrite(unsigned char *buff, size_t len);                /* Single write buffer of size_t ~ e.g. config writing */
       unsigned char USBSID_SingleRead(uint8_t reg);                            /* Single read register, return result */
       int USBSID_ReadMulti(const uint8_t *regs, uint8_t *out, int n);          /* Read n (1-63) registers in one round trip, returns n or -1 */
-      unsigned char USBSID_SingleReadConfig(unsigned char *buff, size_t len);  /* Single to buffer of specified length ~ example: config reading */
+      unsigned char USBSID_SingleReadConfig(unsigned char *buff, size_t len);  /* Single to buffer of specified length ~ e.g. config reading */
       int USBSID_ReadConfig(unsigned char *buff, size_t len);                  /* Single to buffer of specified length ~ returns size of data */
 
       /* Command channel, synchronous, use with the thread disabled */
-      void USBSID_SetPassive(bool on) { passive = on; }                        /* Before USBSID_Init(): skip mute, bus clear and clock query on open */
+      void USBSID_SetPassive(bool on) { passive = on; }                        /* Call before USBSID_Init() to skip mute, bus clear and clock query on open */
       int USBSID_SendCommand(const unsigned char *buff, size_t len);           /* Send raw command bytes, returns bytes sent or -1 */
       int USBSID_ReadResponse(unsigned char *buff, size_t len);                /* Read up to len reply bytes, returns bytes read or -1 */
       int USBSID_SendConfig(uint8_t sub, uint8_t a, uint8_t b,                 /* Send (COMMAND << 6 | CONFIG), sub, a..d as a 6 byte packet */
@@ -605,7 +604,7 @@ namespace USBSID_NS
       int USBSID_StreamStop(void);                                             /* Stop and release the stream interface, 0 */
       bool USBSID_StreamRunning(void);                                         /* Started and IN transfers alive */
       int USBSID_StreamQuery(uint8_t info[STREAM_INFO_LEN]);                   /* Raw STREAM_REQ_INFO reply, 0 or -1 */
-      int USBSID_ReadCached(uint8_t reg);                                      /* Last streamed value 0-255, -1 without data for that SID */
+      int USBSID_ReadCached(uint8_t reg);                                      /* Last streamed value 0-255, -1 when no data for that SID */
       int USBSID_GetSidMemory(uint8_t out[128]);                               /* Copy all 4 x 32 registers, mask of SIDs with data or -1 */
       bool USBSID_GetStreamState(int sid, USBSID_StreamState *state);          /* Latest frame info of SID 0-3 */
       unsigned int USBSID_StreamErrors(void) { return stream_errors; }         /* Failed stream IN transfers */
@@ -617,7 +616,7 @@ namespace USBSID_NS
       int USBSID_PlayerSetPlaytime(uint32_t ms);                               /* Max play time for the uploaded tune */
       int USBSID_PlayerLoad(uint8_t subtune);                                  /* Load uploaded tune at subtune (0 based) and start it */
       int USBSID_PlayerCommand(uint8_t cmd);                                   /* SID_PLAYER_START/STOP/PAUSE/NEXT/PREV/TWO */
-      int USBSID_PlayerMute(uint8_t chip, uint8_t voice, bool mute);           /* chip 0 = all, voice 0 = whole chip */
+      int USBSID_PlayerMute(uint8_t chip, uint8_t voice, bool mute);           /* chip 0 = all, voice 0 = all voices */
       long USBSID_PlayerTime(void);                                            /* Play time in ms, -1 on failure */
       bool USBSID_PlayerMuted(uint8_t state[5]);                               /* Chip mask, then voice masks of chips 1-4 */
 
@@ -642,7 +641,7 @@ namespace USBSID_NS
 
       /* Ringbuffer */
       void USBSID_SetFlush(void);                                              /* Set flush buffer flag to 1 */
-      void USBSID_Flush(void);                                                 /* Same as USBSID_SetFlush, only the driver thread now sends the buffer */
+      void USBSID_Flush(void);                                                 /* Same as USBSID_SetFlush, only the driver thread sends the buffer */
       void USBSID_SetBufferSize(int size);                                     /* Set the buffer size for storing writes */
       void USBSID_SetDiffSize(int size);                                       /* Set the minimum size difference between head & tail */
       void USBSID_ResetRingBuffer(void);                                       /* Resets the ringbuffer to default state */
@@ -661,13 +660,9 @@ namespace USBSID_NS
       void USBSID_SyncTime(void);                                              /* Sync time for cycle delay function */
   };
 
-  /* Enumerate every VID/PID-matching USBSID-Pico currently attached, without
-   * opening any of them for I/O. Opens each briefly (required by libusb to
-   * read its string descriptors) only to read back its serial number, then
-   * closes it again.
-   * Results are sorted by bus/port-path to identified the first physically
-   * connected board when raw device-list order isn't guaranteed to be
-   * that across platforms */
+  /* Enumerate attached USBSID-Pico boards by VID/PID, none are kept open
+   * Each is opened briefly to read its serial number (libusb string descriptors)
+   * Sorted by bus/port-path, raw device-list order differs per platform */
   std::vector<USBSID_DeviceInfo> USBSID_EnumerateDevices(void);
 
 } /* USBSID_NS (USBSIDDriver) */

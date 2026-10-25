@@ -54,11 +54,11 @@ static_assert(USBSID_FEATURE_EMULATOR == US_FEATURE_EMULATOR && USBSID_FEATURE_N
   && USBSID_FEATURE_RP2350 == US_FEATURE_RP2350, "feature bits must match USBSID.h");
 
 /**
- * @brief: Copy src into a NULL terminated C buffer, truncating if needed.
+ * @brief Copy src into a NULL terminated C buffer, truncating if needed
  *
- * @param dst: destination buffer
- * @param len: size of dst, must be > 0
- * @param src: source string
+ * @param dst destination buffer
+ * @param len size of dst, must be > 0
+ * @param src source string
  */
 static void copy_cstr(char *dst, size_t len, const std::string &src)
 {

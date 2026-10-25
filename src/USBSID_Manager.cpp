@@ -64,8 +64,8 @@ bool USBSID_Manager::OpenAll(
 
     if (dev->USBSID_Init(start_threaded, with_cycles) < 0) {
       /* Couldn't open this particular board (permissions, unplugged between
-       * Enumerate() and here, ... or whatever other reason)
-       * Skip it and keep going with the rest. */
+       * Enumerate() and this call, ... or whatever other reason)
+       * Skip it and keep going with the rest */
       continue;
     }
 
@@ -91,11 +91,10 @@ bool USBSID_Manager::OpenAll(
   return !devices_.empty();
 }
 
-/* BuildLogicalMap() follows each board's own configuration: a board's SIDs
- * are numbered by the SID id its firmware gave them (READ_SOCKETCFG bytes 8
- * and 9, one nibble per socket SID), and that id is also the register block
- * the firmware routes to it (id * 0x20). Default presets keep ids in socket
- * order, flipped and mixed presets do not: socket order alone falls short. */
+/* BuildLogicalMap() numbers the SIDs of a board by the SID id from its firmware
+ * (READ_SOCKETCFG bytes 8 and 9, one nibble per socket SID)
+ * This id is also the register block the firmware routes to it (id * 0x20)
+ * Default presets keep ids in socket order, flipped and mixed presets do not */
 void USBSID_Manager::BuildLogicalMap(void)
 {
   logical_map_.clear();
@@ -104,8 +103,8 @@ void USBSID_Manager::BuildLogicalMap(void)
     BoardInfo &board = boards_[b];
 
     if (!board.socketconfig_valid) {
-      /* No usable socket config reply for this board. Fall back to its flat
-       * SID count with an unknown type rather than dropping it entirely. */
+      /* No usable socket config reply for this board
+       * Fall back to its flat SID count with an unknown type */
       for (int n = 0; n < board.numsids; n++) {
         logical_map_.push_back({(int)b, n, 0});
       }
@@ -130,9 +129,9 @@ void USBSID_Manager::BuildLogicalMap(void)
       }
     }
 
-    /* Ids are 0..3 and, unless mirrored, each one used once. Anything else
-     * (a firmware that does not fill bytes 8/9 sends all zeroes) falls back
-     * to socket order, which is what such a firmware routes by as well. */
+    /* Ids are 0..3 and unless mirrored used once each
+     * Anything else (firmware that does not fill bytes 8/9 sends all zeroes)
+     * falls back to socket order, the same order such firmware routes by */
     bool ids_valid = true;
     uint8_t seen = 0;
     for (const Found &f : found) {
@@ -146,8 +145,8 @@ void USBSID_Manager::BuildLogicalMap(void)
       continue;
     }
 
-    /* In id order. A mirrored id (two sockets on one address) is one slot:
-     * a write to it reaches both, the first socket's type describes it. */
+    /* In id order, a mirrored id (two sockets on one address) is one slot
+     * A write to it reaches both, the type of the first socket is used */
     std::stable_sort(found.begin(), found.end(),
                      [](const Found &x, const Found &y) { return x.id < y.id; });
     int last_id = -1;

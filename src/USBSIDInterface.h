@@ -73,14 +73,14 @@ extern "C" {
 
   /* Latest stream frame of one SID as returned by getstreamstate_USBSID() */
   typedef struct {
-    uint32_t frames;     /* Frames received since the stream started, 0: no data */
+    uint32_t frames;     /* Frames received after the stream started, 0 = no data */
     uint16_t tick;       /* Firmware tick sequence */
     uint8_t flags;       /* USBSID_STREAM_FLAG_* bits */
     uint32_t cycles;     /* PHI1 cycle counter of the snapshot */
     uint32_t processed;  /* Main interface packets the firmware processed */
   } USBSIDstreamstate;
 
-  /* Raw frame callback, runs in the stream event thread: no USB I/O on the
+  /* Raw frame callback, runs in the stream event thread ~ no USB I/O on the
    * same board from inside it */
   typedef void (*USBSIDstreamcb)(const uint8_t *frame, int len, void *user);
 #endif /* USBSID_SID_STREAM */
@@ -94,11 +94,10 @@ extern "C" {
   } USBSIDdevinfo;
 
   /**
-   * @brief: List attached boards without opening them, sorted by bus/port.
+   * @brief List attached boards without opening them, sorted by bus/port, returns number of boards found (may exceed max) or -1 on failure
    *
-   * @param out: array to fill, may be NULL when max is 0
-   * @param max: capacity of out
-   * @return: number of boards found (may exceed max), -1 on failure
+   * @param out array to fill, may be NULL when max is 0
+   * @param max capacity of out
    */
   int enumerate_USBSID(USBSIDdevinfo *out, int max);
 
@@ -115,7 +114,7 @@ extern "C" {
   void unmute_USBSID(USBSIDitf);
   void setmuted_USBSID(USBSIDitf, bool muted);  /* sets the firmware muted state, volume writes stay masked while muted */
   void setclockrate_USBSID(USBSIDitf, long clockrate_cycles, bool suspend_sids);
-  void setclockrateforced_USBSID(USBSIDitf, long clockrate_cycles, bool suspend_sids, bool force);  /* force: send even if the rate is unchanged */
+  void setclockrateforced_USBSID(USBSIDitf, long clockrate_cycles, bool suspend_sids, bool force);  /* force sends also when the rate is unchanged */
   long getclockrate_USBSID(USBSIDitf);
   long getrefreshrate_USBSID(USBSIDitf);
   long getrasterrate_USBSID(USBSIDitf);
@@ -130,35 +129,33 @@ extern "C" {
   /* Board targeting, call before init_USBSID() */
 
   /**
-   * @brief: Select board to open by USB serial number.
+   * @brief Select board to open by USB serial number
    *
-   * @param serial: NUL terminated serial, NULL or "" clears the selection
+   * @param serial NUL terminated serial, NULL or "" clears the selection
    */
   void settargetserial_USBSID(USBSIDitf, const char *serial);
 
   /**
-   * @brief: Select board to open by VID/PID match index, used without serial.
+   * @brief Select board to open by VID/PID match index, used without serial
    *
-   * @param idx: 0-based index in libusb device list order
+   * @param idx 0-based index in libusb device list order
    */
   void settargetindex_USBSID(USBSIDitf, int idx);
 
   /**
-   * @brief: Copy serial of the opened board into buff, NUL terminated.
+   * @brief Copy serial of the opened board into buff, NUL terminated, returns full serial length or -1 on invalid arguments
    *
-   * @param buff: destination, USBSID_SERIAL_LEN bytes is always enough
-   * @param len: size of buff
-   * @return: full serial length, -1 on invalid arguments
+   * @param buff destination, USBSID_SERIAL_LEN bytes is enough
+   * @param len size of buff
    */
   int getserial_USBSID(USBSIDitf, char *buff, size_t len);
 
   /* Socket config */
 
   /**
-   * @brief: Read raw socket config, only succeeds once per opened board.
+   * @brief Read raw socket config, only succeeds once per opened board, returns true if cfg holds a valid reply
    *
-   * @param cfg: USBSID_SOCKETCONFIG_LEN byte destination
-   * @return: true if cfg holds a valid reply
+   * @param cfg USBSID_SOCKETCONFIG_LEN byte destination
    */
   bool getsocketconfig_USBSID(USBSIDitf, uint8_t *cfg);
   int getsocketnumsids_USBSID(USBSIDitf, int socket, uint8_t *cfg);
@@ -180,12 +177,12 @@ extern "C" {
 
 #ifdef USBSID_SID_STREAM
   /* SID stream (firmware with USBSID_FEATURE_SIDSTREAM), threaded and unthreaded */
-  /* rate 50/60/250/500/1000 Hz or 0 (50), sid_mask 0 = all; 0 or -1 */
+  /* rate 50/60/250/500/1000 Hz or 0 (50), sid_mask 0 = all. Returns 0 or -1 */
   int streamstart_USBSID(USBSIDitf, int rate_hz, uint8_t sid_mask);
   int streamstop_USBSID(USBSIDitf);                                   /* 0, -1 for NULL */
   bool streamrunning_USBSID(USBSIDitf);
   int streamquery_USBSID(USBSIDitf, uint8_t *info);                  /* USBSID_STREAM_INFO_LEN bytes, 0 or -1 */
-  int readcached_USBSID(USBSIDitf, uint8_t reg);                      /* 0-255, -1 without data for that SID */
+  int readcached_USBSID(USBSIDitf, uint8_t reg);                      /* 0-255, -1 when no data for that SID */
   int getsidmemory_USBSID(USBSIDitf, uint8_t *out);                   /* 128 bytes, mask of SIDs with data or -1 */
   bool getstreamstate_USBSID(USBSIDitf, int sid, USBSIDstreamstate *state);
   void setstreamcallback_USBSID(USBSIDitf, USBSIDstreamcb cb, void *user);
@@ -193,47 +190,36 @@ extern "C" {
 
   /* Command channel, synchronous, use with the thread disabled */
   /**
-   * @brief: Open without mute, bus clear or clock query, call before init_USBSID().
+   * @brief Open without mute, bus clear or clock query, call before init_USBSID()
    *
-   * @param on: true for a passive open
+   * @param on true for a passive open
    */
   void setpassive_USBSID(USBSIDitf, bool on);
   /**
-   * @brief: Send raw command bytes.
-   *
-   * @return: bytes sent, -1 on failure
+   * @brief Send raw command bytes, returns bytes sent or -1 on failure
    */
   int sendcommand_USBSID(USBSIDitf, const unsigned char *buff, size_t len);
   /**
-   * @brief: Read one reply of at most len bytes.
-   *
-   * @return: bytes read, -1 on failure
+   * @brief Read one reply of at most len bytes, returns bytes read or -1 on failure
    */
   int readresponse_USBSID(USBSIDitf, unsigned char *buff, size_t len);
   /**
-   * @brief: Send a 6 byte config command: CONFIG, sub, a, b, c, d.
-   *
-   * @return: bytes sent, -1 on failure
+   * @brief Send a 6 byte config command (CONFIG, sub, a, b, c, d), returns bytes sent or -1 on failure
    */
   int sendconfig_USBSID(USBSIDitf, uint8_t sub, uint8_t a, uint8_t b, uint8_t c, uint8_t d);
   /**
-   * @brief: Read the firmware feature bitmask (USBSID_FEATURE_*), cached.
-   *
-   * @return: bitmask, -1 on failure
+   * @brief Read the firmware feature bitmask (USBSID_FEATURE_*), cached, returns bitmask or -1 on failure
    */
   int getfeatures_USBSID(USBSIDitf);
   /**
-   * @brief: Read the firmware version integer (81 = 0.8.1, 100 = 1.0.0), cached.
-   *
-   * @return: version integer, -1 on failure
+   * @brief Read the firmware version integer (81 = 0.8.1, 100 = 1.0.0), cached, returns version integer or -1 on failure
    */
   int getfirmwareversionint_USBSID(USBSIDitf);
   /* Onboard emulator, firmware with ONBOARD_EMULATOR=1 */
   /**
-   * @brief: Upload a tune file to the onboard emulator.
+   * @brief Upload a tune file to the onboard emulator, returns data bytes sent or -1 on failure
    *
-   * @param filetype: USBSID_UPLOAD_FILE_*
-   * @return: data bytes sent, -1 on failure
+   * @param filetype USBSID_UPLOAD_FILE_*
    */
   int uploadtune_USBSID(USBSIDitf, const uint8_t *data, size_t len, uint8_t filetype);
   int playersetplaytime_USBSID(USBSIDitf, uint32_t ms);  /* max play time, -1 on failure */
@@ -241,7 +227,7 @@ extern "C" {
   int playercommand_USBSID(USBSIDitf, uint8_t cmd);  /* USBSID_PLAYER_*, -1 on failure */
   int playermute_USBSID(USBSIDitf, uint8_t chip, uint8_t voice, bool mute);  /* chip 0 = all, voice 0 = chip */
   long playertime_USBSID(USBSIDitf);  /* play time in ms, -1 on failure */
-  bool playermuted_USBSID(USBSIDitf, uint8_t *state);  /* 5 bytes: chip mask, voice masks chips 1-4 */
+  bool playermuted_USBSID(USBSIDitf, uint8_t *state);  /* 5 bytes ~ chip mask, voice masks chips 1-4 */
   /* Asynchronous direct */
   void writebuffer_USBSID(USBSIDitf p, unsigned char *buff, size_t len);
   void write_USBSID(USBSIDitf, uint8_t reg, uint8_t val);
