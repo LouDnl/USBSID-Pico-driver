@@ -1,0 +1,117 @@
+# Gitea Actions copy of .github/workflows/release-java.yml (git.loudai.nl). Gitea runs
+# .gitea/workflows/ and ignores .github/workflows/ when this directory exists.
+# Differences: no macos-14 (no Apple Silicon runner), repositories under
+# LouDnl/ on GitHub live under usbsid/ here, releases go through Gitea's API.
+
+name: Java driver release
+
+# Tag java-v<version> (e.g. java-v1.2) releases the Java driver JAR and POM,
+# versioned apart from the C/C++ driver. <version> must equal the <version>
+# in java/usbsid-usb-driver-library-java/pom.xml, test/ci/package.sh fails
+# the release otherwise.
+
+on:
+  push:
+    tags:
+      - 'java-v[0-9]+.[0-9]+'
+      - 'java-v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    uses: ./.gitea/workflows/build-java.yml
+
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version from tag
+        id: version
+        run: |
+          # Manual runs must pick a tag under "Use workflow from", not a branch
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "::error::Run from a tag, not branch '$GITHUB_REF_NAME'"
+            exit 1
+          fi
+          TAG="$GITHUB_REF_NAME"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#java-v}" >> "$GITHUB_OUTPUT"
+
+      # Replaces the JAR tracked in git with the one just built
+      - name: Download JAR and POM
+        uses: actions/download-artifact@v4
+        with:
+          name: java-driver
+          path: java/usbsid-usb-driver-library-java
+
+      - name: Package JAR and POM
+        run: bash test/ci/package.sh java "${{ steps.version.outputs.version }}" release
+
+      - name: Generate release notes
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          # Previous Java release tag, C/C++ tags excluded
+          PREV=$(git tag --list 'java-v[0-9]*' --sort=-version:refname | grep -vx "$TAG" | head -n 1 || true)
+          {
+            echo "Java driver library for USBSID-Pico, built with JDK 17 (Java 17 bytecode)."
+            echo
+            echo "- \`usbsid-usb-driver-library-java-*.jar\`: driver library"
+            echo "- \`usbsid-usb-driver-library-java-*.pom\`: dependency reduced POM, for a local Maven install"
+            echo
+            echo "**Commits in this release:**"
+            if [ -n "$PREV" ]; then
+              git log "$PREV..$TAG" --oneline -- java
+            else
+              git log "$TAG" --oneline -- java
+            fi
+          } > release_notes.md
+          cat release_notes.md
+
+      - name: Create release
+        env:
+          TOKEN: ${{ secrets.GITEA_TOKEN }}
+          API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}
+          TAG: ${{ steps.version.outputs.tag }}
+          TITLE: Java driver ${{ steps.version.outputs.tag }}
+          PRERELEASE: "false"
+        run: |
+          # Gitea's release API (the GitHub workflow uses a GitHub-only action).
+          # Re-runs reuse the release of this tag and replace assets of the same name.
+          set -euo pipefail
+          auth=(-H "Authorization: token $TOKEN")
+          id=$(curl -fsS "${auth[@]}" "$API/releases/tags/$TAG" 2>/dev/null \
+                 | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' || true)
+          if [ -z "$id" ]; then
+            payload=$(TAG="$TAG" TITLE="$TITLE" PRE="$PRERELEASE" python3 -c '
+          import json, os
+          body = open("release_notes.md").read() if os.path.exists("release_notes.md") else ""
+          print(json.dumps({"tag_name": os.environ["TAG"], "name": os.environ["TITLE"],
+                            "body": body, "prerelease": os.environ["PRE"] == "true"}))')
+            id=$(curl -fsS "${auth[@]}" -H 'Content-Type: application/json' -X POST \
+                   "$API/releases" -d "$payload" \
+                 | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+          fi
+          echo "release id $id for $TAG"
+          shopt -s nullglob
+          for f in release/*; do
+            n=$(basename "$f")
+            for old in $(curl -fsS "${auth[@]}" "$API/releases/$id/assets" \
+                | python3 -c 'import json,sys; print(" ".join(str(a["id"]) for a in json.load(sys.stdin) if a["name"]==sys.argv[1]))' "$n"); do
+              curl -fsS "${auth[@]}" -X DELETE "$API/releases/$id/assets/$old"
+            done
+            curl -fsS "${auth[@]}" -X POST -F "attachment=@$f" "$API/releases/$id/assets?name=$n" >/dev/null
+            echo "uploaded $n"
+          done

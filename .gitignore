@@ -31,6 +31,8 @@
 !.github/workflows/**
 !.gitlab
 !.gitlab/**
+!.gitea
+!.gitea/**
 !src
 !src/**
 !test

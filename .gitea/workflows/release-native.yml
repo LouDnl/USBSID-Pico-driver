@@ -1,0 +1,109 @@
+# Gitea Actions copy of .github/workflows/release-native.yml (git.loudai.nl). Gitea runs
+# .gitea/workflows/ and ignores .github/workflows/ when this directory exists.
+# Differences: no macos-14 (no Apple Silicon runner), repositories under
+# LouDnl/ on GitHub live under usbsid/ here, releases go through Gitea's API.
+
+name: C/C++ driver release
+
+# Tag v<version> (e.g. v1.0.0) releases the C/C++ driver: source archives
+# of src/ and libusbsiddrv-vice/ (src sources plus the VICE build files),
+# published only after every platform build in build-native.yml passes.
+# The Java driver has its own tags and workflow, see release-java.yml.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    uses: ./.gitea/workflows/build-native.yml
+
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version from tag
+        id: version
+        run: |
+          # Manual runs must pick a tag under "Use workflow from", not a branch
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "::error::Run from a tag, not branch '$GITHUB_REF_NAME'"
+            exit 1
+          fi
+          TAG="$GITHUB_REF_NAME"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Package source archives
+        run: bash test/ci/package.sh native "${{ steps.version.outputs.version }}" release
+
+      - name: Generate release notes
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          # Previous C/C++ release tag, Java tags excluded
+          PREV=$(git tag --list 'v[0-9]*' --sort=-version:refname | grep -vx "$TAG" | head -n 1 || true)
+          {
+            echo "C/C++ driver source for USBSID-Pico."
+            echo
+            echo "- \`USBSID-Pico-driver-src-*\`: \`src/\`, C++ driver, C interface and multiboard manager"
+            echo "- \`USBSID-Pico-driver-vice-*\`: \`src/\` sources with the VICE build files from \`libusbsiddrv-vice/\`"
+            echo
+            echo "**Commits in this release:**"
+            if [ -n "$PREV" ]; then
+              git log "$PREV..$TAG" --oneline -- src libusbsiddrv-vice
+            else
+              git log "$TAG" --oneline -- src libusbsiddrv-vice
+            fi
+          } > release_notes.md
+          cat release_notes.md
+
+      - name: Create release
+        env:
+          TOKEN: ${{ secrets.GITEA_TOKEN }}
+          API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}
+          TAG: ${{ steps.version.outputs.tag }}
+          TITLE: C/C++ driver ${{ steps.version.outputs.tag }}
+          PRERELEASE: "false"
+        run: |
+          # Gitea's release API (the GitHub workflow uses a GitHub-only action).
+          # Re-runs reuse the release of this tag and replace assets of the same name.
+          set -euo pipefail
+          auth=(-H "Authorization: token $TOKEN")
+          id=$(curl -fsS "${auth[@]}" "$API/releases/tags/$TAG" 2>/dev/null \
+                 | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' || true)
+          if [ -z "$id" ]; then
+            payload=$(TAG="$TAG" TITLE="$TITLE" PRE="$PRERELEASE" python3 -c '
+          import json, os
+          body = open("release_notes.md").read() if os.path.exists("release_notes.md") else ""
+          print(json.dumps({"tag_name": os.environ["TAG"], "name": os.environ["TITLE"],
+                            "body": body, "prerelease": os.environ["PRE"] == "true"}))')
+            id=$(curl -fsS "${auth[@]}" -H 'Content-Type: application/json' -X POST \
+                   "$API/releases" -d "$payload" \
+                 | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+          fi
+          echo "release id $id for $TAG"
+          shopt -s nullglob
+          for f in release/*; do
+            n=$(basename "$f")
+            for old in $(curl -fsS "${auth[@]}" "$API/releases/$id/assets" \
+                | python3 -c 'import json,sys; print(" ".join(str(a["id"]) for a in json.load(sys.stdin) if a["name"]==sys.argv[1]))' "$n"); do
+              curl -fsS "${auth[@]}" -X DELETE "$API/releases/$id/assets/$old"
+            done
+            curl -fsS "${auth[@]}" -X POST -F "attachment=@$f" "$API/releases/$id/assets?name=$n" >/dev/null
+            echo "uploaded $n"
+          done
