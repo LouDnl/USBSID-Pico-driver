@@ -344,6 +344,10 @@ extern "C"
     if( p == NULL ) return -1;
     return ((USBSID_Class*)p)->USBSID_PlayerTime();
   };
+  int playerffwd_USBSID(USBSIDitf p, bool on){
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_PlayerFfwd(on);
+  };
   bool playermuted_USBSID(USBSIDitf p, uint8_t *state){
     if( p == NULL || state == NULL ) return false;
     return ((USBSID_Class*)p)->USBSID_PlayerMuted(state);

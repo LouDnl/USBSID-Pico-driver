@@ -228,6 +228,7 @@ extern "C" {
   int playermute_USBSID(USBSIDitf, uint8_t chip, uint8_t voice, bool mute);  /* chip 0 = all, voice 0 = chip */
   long playertime_USBSID(USBSIDitf);  /* play time in ms, -1 on failure */
   bool playermuted_USBSID(USBSIDitf, uint8_t *state);  /* 5 bytes ~ chip mask, voice masks chips 1-4 */
+  int playerffwd_USBSID(USBSIDitf, bool on);  /* fast forward on or off, -1 on failure */
   /* Asynchronous direct */
   void writebuffer_USBSID(USBSIDitf p, unsigned char *buff, size_t len);
   void write_USBSID(USBSIDitf, uint8_t reg, uint8_t val);

@@ -223,6 +223,7 @@ namespace USBSID_NS
     SID_PLAYER_NEXT     = 0xE4,  /* Next subtune */
     SID_PLAYER_PREV     = 0xE5,  /* Previous subtune */
     SID_PLAYER_TWO      = 0xE6,  /* Force play on socket two or SID two */
+    SID_PLAYER_FFWD     = 0xE7,  /* Fast forward, byte 2 = 1 on, 0 off */
     SID_PLAYER_MUTE     = 0xE9,  /* Mute chip/voice, bytes 2-4 = chip, voice, mute */
     SID_PLAYER_MUTED    = 0xEA,  /* Read mute state, 5 byte reply */
     SID_PLAYER_TIME     = 0xEB,  /* Read play time in ms, 4 byte big endian reply */
@@ -618,6 +619,7 @@ namespace USBSID_NS
       int USBSID_PlayerCommand(uint8_t cmd);                                   /* SID_PLAYER_START/STOP/PAUSE/NEXT/PREV/TWO */
       int USBSID_PlayerMute(uint8_t chip, uint8_t voice, bool mute);           /* chip 0 = all, voice 0 = all voices */
       long USBSID_PlayerTime(void);                                            /* Play time in ms, -1 on failure */
+      int USBSID_PlayerFfwd(bool on);                                          /* Onboard fast forward on or off */
       bool USBSID_PlayerMuted(uint8_t state[5]);                               /* Chip mask, then voice masks of chips 1-4 */
 
       /* Asynchronous direct */

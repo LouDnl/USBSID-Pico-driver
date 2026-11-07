@@ -814,6 +814,16 @@ int USBSID_Class::USBSID_PlayerMute(uint8_t chip, uint8_t voice, bool mute)
 }
 
 /**
+ * @brief Turn fast forward of the onboard player on or off, returns bytes sent or -1 on failure
+ *
+ * @param on true to fast forward, false for normal speed
+ */
+int USBSID_Class::USBSID_PlayerFfwd(bool on)
+{
+  return USBSID_SendConfig(SID_PLAYER_FFWD, (uint8_t)(on ? 1 : 0), 0, 0, 0);
+}
+
+/**
  * @brief Read the play time of the current onboard tune, returns milliseconds or -1 on failure
  */
 long USBSID_Class::USBSID_PlayerTime(void)
