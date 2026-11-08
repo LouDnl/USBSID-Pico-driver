@@ -71,6 +71,7 @@ jobs:
         with:
           msystem: ${{ matrix.platform.msystem }}
           update: true
+          release: false
           pacboy: >-
             toolchain:p
             libusb:p
