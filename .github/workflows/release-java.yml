@@ -28,7 +28,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -46,7 +46,7 @@ jobs:
 
       # Replaces the JAR tracked in git with the one just built
       - name: Download JAR and POM
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: java-driver
           path: java/usbsid-usb-driver-library-java
