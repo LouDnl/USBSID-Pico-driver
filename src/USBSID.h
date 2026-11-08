@@ -436,6 +436,29 @@ namespace USBSID_NS
       int buffer_pos = 1;                            /* current position of the out buffer */
       int flush_buffer = 0;                          /* flush buffer yes or no */
 
+#ifdef USBSID_OUT_TIMING
+      /* OUT timing instrument: measures per packet submit gap, completion latency and audio lead.
+       * Enable: define USBSID_OUT_TIMING at compile time, then run with env USBSID_OUT_TIMING=1
+       * (optional USBSID_OUT_TIMING_CSV=<path>). Touched only by the driver thread: SendThreadBuffer
+       * and usb_out (called from handle_events in that same thread), plain members are fine */
+      struct OutTiming {
+        bool inited = false, on = false;
+        std::string csv_path;
+        int64_t t_first = 0, t_submit = 0, t_prev_complete = 0, t_last_complete = 0;
+        int64_t audio_ns = 0, min_lead = INT64_MAX, lead_cur = 0, gap_cur = 0;
+        int64_t cycles_cur = 0, max_gap = 0, max_lat = 0, decreases = 0;
+        int writes_cur = 0;
+        uint64_t packets = 0, completed = 0, writes = 0;
+        uint64_t gap_hist[9] = {0}, lat_hist[9] = {0};
+        struct Row { int64_t t_submit_ns, lat_ns, gap_ns; int64_t cycles, lead_ns; int writes; };
+        std::vector<Row> rows;
+      } out_timing;
+      void USBSID_OutTimingInit(void);
+      void USBSID_OutTimingSubmit(const uint8_t *buf, int len);
+      void USBSID_OutTimingComplete(void);
+      void USBSID_OutTimingReport(void);
+#endif  /* USBSID_OUT_TIMING */
+
       /* Ringbuffer */
       ring_buffer_t us_ringbuffer = {0, 0, 0, NULL}; /* Init with default null values */
 

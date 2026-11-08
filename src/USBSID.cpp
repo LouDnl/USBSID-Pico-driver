@@ -1788,6 +1788,116 @@ void USBSID_Class::USBSID_RingPop(void)
   return;
 }
 
+#ifdef USBSID_OUT_TIMING
+/* Opt-in OUT timing stats, measurement only, off unless USBSID_OUT_TIMING is set */
+static inline int64_t us_now_ns(void)
+{
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+static inline int us_bucket(int64_t ns)
+{
+  static const int64_t lim[8] = {50000, 100000, 200000, 300000, 500000, 1000000, 2000000, 5000000};
+  for (int i = 0; i < 8; i++) if (ns < lim[i]) return i;
+  return 8;
+}
+
+void USBSID_Class::USBSID_OutTimingInit(void)
+{
+  out_timing.inited = true;
+  const char *e = getenv("USBSID_OUT_TIMING");
+  if (e == NULL || *e == '\0' || *e == '0') return;
+  out_timing.on = true;
+  const char *p = getenv("USBSID_OUT_TIMING_CSV");
+  if (p != NULL && *p != '\0') {
+    out_timing.csv_path = p;
+    out_timing.rows.reserve(2000000);
+  }
+}
+
+void USBSID_Class::USBSID_OutTimingSubmit(const uint8_t *buf, int len)
+{
+  if (!out_timing.inited) USBSID_OutTimingInit();
+  if (!out_timing.on) return;
+  OutTiming &t = out_timing;
+  const int64_t now = us_now_ns();
+  int writes = 0;
+  int64_t cycles = 0;
+  const int type = buf[0] >> 6;
+  if (type == CYCLED_WRITE) {
+    for (int i = 1; i + 3 < len; i += 4) cycles += (int64_t)((buf[i + 2] << 8) | buf[i + 3]);
+    writes = (len - 1) / 4;
+  } else if (type == WRITE) {
+    writes = (len - 1) / 2;
+  }
+  if (t.packets == 0) t.t_first = now;
+  t.gap_cur = (t.packets == 0) ? 0 : now - t.t_prev_complete;
+  if (us_clkrate > 0) t.audio_ns += cycles * 1000000000LL / us_clkrate;
+  t.lead_cur = t.audio_ns - (now - t.t_first);
+  if (now - t.t_first >= 1000000000LL && us_clkrate > 0 && cycles > 0) {
+    if (t.min_lead == INT64_MAX) t.min_lead = t.lead_cur;
+    else if (t.lead_cur < t.min_lead) { t.min_lead = t.lead_cur; t.decreases++; }
+  }
+  t.t_submit = now;
+  t.cycles_cur = cycles;
+  t.writes_cur = writes;
+  t.writes += writes;
+  t.packets++;
+  t.gap_hist[us_bucket(t.gap_cur)]++;
+  if (t.gap_cur > t.max_gap) t.max_gap = t.gap_cur;
+}
+
+void USBSID_Class::USBSID_OutTimingComplete(void)
+{
+  OutTiming &t = out_timing;
+  const int64_t now = us_now_ns();
+  const int64_t lat = now - t.t_submit;
+  t.t_prev_complete = t.t_last_complete = now;
+  t.completed++;
+  t.lat_hist[us_bucket(lat)]++;
+  if (lat > t.max_lat) t.max_lat = lat;
+  if (!t.csv_path.empty())
+    t.rows.push_back({t.t_submit - t.t_first, lat, t.gap_cur, t.cycles_cur, t.lead_cur, t.writes_cur});
+}
+
+void USBSID_Class::USBSID_OutTimingReport(void)
+{
+  OutTiming &t = out_timing;
+  t.on = false;  /* report once */
+  if (t.packets == 0) return;
+  const double wall = (double)((t.t_last_complete > t.t_first ? t.t_last_complete : t.t_submit) - t.t_first) / 1e9;
+  static const char *nm[9] = {"<50", "<100", "<200", "<300", "<500", "<1000", "<2000", "<5000", ">=5000"};
+  fprintf(stderr, "[USBSID] OUT timing: packets %llu writes %llu wall %.3f s, %.0f packets/s %.0f writes/s\n",
+    (unsigned long long)t.packets, (unsigned long long)t.writes, wall,
+    wall > 0 ? t.packets / wall : 0.0, wall > 0 ? t.writes / wall : 0.0);
+  fprintf(stderr, "[USBSID] OUT timing: max gap %.1f us, max lat %.1f us, clkrate %ld\n",
+    t.max_gap / 1000.0, t.max_lat / 1000.0, us_clkrate);
+  fprintf(stderr, "[USBSID] OUT timing: gap_us hist (bucket us:count)");
+  for (int i = 0; i < 9; i++) fprintf(stderr, " %s:%llu", nm[i], (unsigned long long)t.gap_hist[i]);
+  fprintf(stderr, "\n[USBSID] OUT timing: lat_us hist (bucket us:count)");
+  for (int i = 0; i < 9; i++) fprintf(stderr, " %s:%llu", nm[i], (unsigned long long)t.lat_hist[i]);
+  if (t.min_lead == INT64_MAX) fprintf(stderr, "\n[USBSID] OUT timing: min lead n/a, lead decreases %lld\n", (long long)t.decreases);
+  else fprintf(stderr, "\n[USBSID] OUT timing: min lead %.1f us (after 1 s), lead decreases %lld\n",
+    t.min_lead / 1000.0, (long long)t.decreases);
+  if (!t.csv_path.empty()) {
+    FILE *f = fopen(t.csv_path.c_str(), "w");
+    if (f == NULL) {
+      fprintf(stderr, "[USBSID] OUT timing: cannot open csv %s\n", t.csv_path.c_str());
+    } else {
+      fprintf(f, "idx,t_submit_us,lat_us,gap_us,writes,cycles,lead_us\n");
+      for (size_t i = 0; i < t.rows.size(); i++) {
+        const OutTiming::Row &r = t.rows[i];
+        fprintf(f, "%zu,%.1f,%.1f,%.1f,%d,%lld,%.1f\n", i, r.t_submit_ns / 1000.0, r.lat_ns / 1000.0,
+          r.gap_ns / 1000.0, r.writes, (long long)r.cycles, r.lead_ns / 1000.0);
+      }
+      fclose(f);
+      fprintf(stderr, "[USBSID] OUT timing: csv %s rows %zu\n", t.csv_path.c_str(), t.rows.size());
+    }
+  }
+}
+#endif  /* USBSID_OUT_TIMING */
+
 void USBSID_Class::USBSID_SendThreadBuffer(void)
 { /* Driver thread only, us_mutex held on entry and on return
    * us_mutex is released during USB I/O, producers only wait on ring access
@@ -1802,6 +1912,9 @@ void USBSID_Class::USBSID_SendThreadBuffer(void)
   if (!transfer_out_pending && transfer_out != NULL) {  /* NULL after LIBUSB_StopTransfers() */
     memset(out_buffer, 0, len_out_buffer);
     memcpy(out_buffer, thread_buffer, len);
+#ifdef USBSID_OUT_TIMING
+    if (out_timing.on || !out_timing.inited) USBSID_OutTimingSubmit(thread_buffer, len);
+#endif
     transfer_out_pending = true;
     const int err = libusb_submit_transfer(transfer_out);
     if (err < 0) {
@@ -2425,6 +2538,9 @@ int USBSID_Class::LIBUSB_Exit(void)
     USBSID_Reset();
     #endif
     LIBUSB_StopTransfers();  /* uses the pending flags to cancel and wait */
+#ifdef USBSID_OUT_TIMING
+    if (out_timing.on) USBSID_OutTimingReport();
+#endif
     LIBUSB_FreeInBuffer();
     LIBUSB_FreeOutBuffer();
     LIBUSB_CloseDevice();
@@ -2467,6 +2583,9 @@ void LIBUSB_CALL USBSID_Class::usb_out(struct libusb_transfer *transfer)
     USBERR(stderr, "[USBSID] Sent data length %d is different from the defined buffer length: %d or actual length %d\n",
       transfer->length, self->len_out_buffer, transfer->actual_length);
   }
+#ifdef USBSID_OUT_TIMING
+  if (self->out_timing.on) self->USBSID_OutTimingComplete();
+#endif
   self->transfer_out_pending = false;
 }
 
