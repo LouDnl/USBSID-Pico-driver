@@ -264,11 +264,6 @@ void USBSID_Manager::FlushAll(void)
   for (auto &dev : devices_) dev->USBSID_SetFlush();
 }
 
-void USBSID_Manager::ResetRingBufferAll(void)
-{
-  for (auto &dev : devices_) dev->USBSID_ResetRingBuffer();
-}
-
 void USBSID_Manager::ResetAllRegistersAll(void)
 {
   for (auto &dev : devices_) dev->USBSID_ResetAllRegisters();
@@ -297,4 +292,19 @@ void USBSID_Manager::SetClockRateAll(long clockrate_cycles, bool suspend_sids)
 void USBSID_Manager::SetClockRateAll(long clockrate_cycles, bool suspend_sids, bool force)
 {
   for (auto &dev : devices_) dev->USBSID_SetClockRate(clockrate_cycles, suspend_sids, force);
+}
+
+void USBSID_Manager::SetBufferSizeAll(int size)
+{
+  for (auto &dev : devices_) dev->USBSID_SetBufferSize(size);
+}
+
+void USBSID_Manager::ResetRingBufferAll(void)
+{
+  for (auto &dev : devices_) dev->USBSID_ResetRingBuffer();
+}
+
+void USBSID_Manager::RestartRingBufferAll(void)
+{
+  for (auto &dev : devices_) dev->USBSID_RestartRingBuffer();
 }

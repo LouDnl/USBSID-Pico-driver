@@ -159,13 +159,15 @@ class USBSID_Manager {
 
     /* Broadcast to all open boards, in board open order */
     void FlushAll(void);
-    void ResetRingBufferAll(void);
     void ResetAllRegistersAll(void);
     void UnMuteAll(void);
     void MuteAll(void);
     void SetMutedAll(bool muted);  /* Sets the firmware muted state, see USBSID_SetMuted() */
     void SetClockRateAll(long clockrate_cycles, bool suspend_sids);
     void SetClockRateAll(long clockrate_cycles, bool suspend_sids, bool force);  /* force sends also when the rate is unchanged */
+    void SetBufferSizeAll(int size);
+    void ResetRingBufferAll(void);
+    void RestartRingBufferAll(void);
 
   private:
     std::vector<std::unique_ptr<USBSID_NS::USBSID_Class>> devices_;
