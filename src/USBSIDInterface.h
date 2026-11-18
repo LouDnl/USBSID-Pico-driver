@@ -102,6 +102,14 @@ extern "C" {
   int getpcbversion_USBSID(USBSIDitf);
   void setstereo_USBSID(USBSIDitf, int state);
   void togglestereo_USBSID(USBSIDitf);
+  int getstereo_USBSID(USBSIDitf);                                              /* 1 stereo, 0 mono, -1 on failure or PCB below v1.3 */
+  int getaudiolock_USBSID(USBSIDitf);                                           /* 1 locked, 0 unlocked, -1 on failure */
+  int setstereosave_USBSID(USBSIDitf, int state, bool save);                    /* state read back, -1 on failure */
+  int lockaudio_USBSID(USBSIDitf, bool lock, bool save);                        /* bytes sent or -1 */
+  int getpcbversionstring_USBSID(USBSIDitf, char *buff, size_t len);            /* string length or -1 */
+  int getfirmwareversionstring_USBSID(USBSIDitf, char *buff, size_t len);       /* string length or -1 */
+  int readfullconfig_USBSID(USBSIDitf, uint8_t *cfg);                           /* USBSID_CONFIG_LEN bytes, 64 or -1 */
+  int refreshsocketconfig_USBSID(USBSIDitf, uint8_t *cfg);                      /* USBSID_SOCKETCONFIG_LEN bytes, 12 or -1 */
   void enablesid_USBSID(USBSIDitf);
   void disablesid_USBSID(USBSIDitf);
 

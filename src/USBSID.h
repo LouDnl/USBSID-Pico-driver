@@ -394,6 +394,7 @@ namespace USBSID_NS
       int run_thread = 0;
       std::atomic_int us_thread{0};
       pthread_mutex_t us_mutex = PTHREAD_MUTEX_INITIALIZER;
+      pthread_mutex_t cmd_mutex = PTHREAD_MUTEX_INITIALIZER;  /* Serializes request/reply pairs, never held with us_mutex */
       pthread_cond_t us_cond = PTHREAD_COND_INITIALIZER;
       pthread_t us_ptid;
 
@@ -436,6 +437,7 @@ namespace USBSID_NS
       int LIBUSB_DetachKernelDriver(void);
       int LIBUSB_ConfigureDevice(void);
       int LIBUSB_ReadIn(unsigned char *buff, size_t len, int *actual_length);
+      int LIBUSB_ReadReply(unsigned char *buff, size_t want, int timeout_ms);  /* Bounded reply read, bytes copied or -1 */
       void LIBUSB_DrainIn(void);
       void LIBUSB_CancelIn(void);
       void LIBUSB_CheckLost(int error);
@@ -471,6 +473,16 @@ namespace USBSID_NS
       /* Ringbuffer reads & writes*/
       void USBSID_RingPopCycled(void);     /* Driver thread writer with cycles */
       void USBSID_RingPop(void);           /* Driver thread writer */
+
+      /* Request/reply, bounded reply timeouts in ms */
+      enum {
+        QUERY_TIMEOUT_MS  = 500,    /* Config queries */
+        DETECT_TIMEOUT_MS = 10000,  /* Detection, board runs its routines before the reply */
+      };
+      int USBSID_Query(uint8_t sub, uint8_t a, uint8_t b, uint8_t c, uint8_t d,  /* Send config command and read want reply bytes under cmd_mutex */
+                       unsigned char *reply, size_t want, int timeout_ms);       /* Bytes read or -1 */
+      int USBSID_QueryConfig(unsigned char *cfg);                              /* READ_CONFIG query with marker check, drains on mismatch, 64 or -1 */
+      int USBSID_QueryVersionString(uint8_t sub, char *buff, size_t len);      /* Version string query for US_PCB_VERSION or USBSID_VERSION, string length or -1 */
 
     public:
 
@@ -510,15 +522,23 @@ namespace USBSID_NS
       long USBSID_GetRefreshRate(void);                                        /* Get cycles per refresh rate */
       long USBSID_GetRasterRate(void);                                         /* Get cycles per raster rate */
       uint8_t* USBSID_GetSocketConfig(uint8_t socket_config[]);                /* Get socket config for parsing */
+      int USBSID_ReadFullConfig(uint8_t config[64]);                           /* READ_CONFIG raw 64 byte reply, 64 or -1, markers checked */
+      int USBSID_RefreshSocketConfig(uint8_t socket_config[]);                 /* READ_SOCKETCFG re-read on every call, also re-reads numsids and fmoplsid caches, 12 or -1 */
       int USBSID_GetSocketNumSIDS(int socket, uint8_t socket_config[]);        /* Get the socket number of sids configured */
       int USBSID_GetSocketChipType(int socket, uint8_t socket_config[]);       /* Get the socket chip type configured */
       int USBSID_GetSocketSIDType1(int socket, uint8_t socket_config[]);       /* Get the socket SID 1 type configured */
       int USBSID_GetSocketSIDType2(int socket, uint8_t socket_config[]);       /* Get the socket SID 2 type configured (only works for clone chip types ofcourse) */
       int USBSID_GetNumSIDs(void);                                             /* Get the total number of sids configured */
       int USBSID_GetFMOplSID(void);                                            /* Get the sid number (if configured) to address FMOpl */
-      int USBSID_GetPCBVersion(void);                                          /* Get the PCB version */
+      int USBSID_GetPCBVersion(void);                                          /* Get the PCB version integer (15 = v1.5), cached, 0 on failure */
+      int USBSID_GetPCBVersionString(char *buff, size_t len);                  /* US_PCB_VERSION string reply e.g. "1.5", NUL terminated, string length or -1 */
+      int USBSID_GetFirmwareVersionString(char *buff, size_t len);             /* USBSID_VERSION string reply e.g. "0.9.0", NUL terminated, string length or -1 */
       void USBSID_SetStereo(int state);                                        /* Set device to mono or stereo ~ PCB v1.3 and newer */
       void USBSID_ToggleStereo(void);                                          /* Toggle between mono and stereo ~ PCB v1.3 and newer */
+      int USBSID_GetStereo(void);                                              /* GET_AUDIO, 1 stereo, 0 mono, -1 on failure or PCB below v1.3 */
+      int USBSID_GetAudioLock(void);                                           /* READ_CONFIG byte 58, 1 locked, 0 unlocked, -1 on failure */
+      int USBSID_SetStereoSave(int state, bool save);                          /* SET_AUDIO with save flag, returns state read back with GET_AUDIO or -1 */
+      int USBSID_LockAudio(bool lock, bool save);                              /* LOCK_AUDIO, bytes sent or -1 */
 
       /* Synchronous direct */
       void USBSID_SingleWrite(unsigned char *buff, size_t len);                /* Single write buffer of size_t ~ e.g. config writing */
@@ -541,7 +561,7 @@ namespace USBSID_NS
       int USBSID_StreamStart(int rate_hz, uint8_t sid_mask);                   /* rate 0 = 50 Hz, sid_mask 0 = all, 0 or -1 */
       int USBSID_StreamStop(void);                                             /* Stop and release the stream interface, 0 */
       bool USBSID_StreamRunning(void);                                         /* Started and IN transfers alive */
-      int USBSID_StreamQuery(uint8_t info[STREAM_INFO_LEN]);                   /* Raw STREAM_REQ_INFO reply, 0 or -1 */
+      int USBSID_StreamQuery(uint8_t info[STREAM_INFO_LEN]);                   /* Raw STREAM_REQUEST_INFO reply, 0 or -1 */
       int USBSID_ReadCached(uint8_t reg);                                      /* Last streamed value 0-255, -1 when no data for that SID */
       int USBSID_GetSidMemory(uint8_t out[128]);                               /* Copy all 4 x 32 registers, mask of SIDs with data or -1 */
       bool USBSID_GetStreamState(int sid, USBSID_StreamState *state);          /* Latest frame info of SID 0-3 */

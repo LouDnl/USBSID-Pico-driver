@@ -119,6 +119,7 @@ USBSID_Class::~USBSID_Class()
   result = NULL;
   /* Destroy in this function, a thread restart after StopThread() locks it again */
   pthread_mutex_destroy(&us_mutex);
+  pthread_mutex_destroy(&cmd_mutex);
   pthread_cond_destroy(&us_cond);
 #ifdef USBSID_SID_STREAM
   pthread_mutex_destroy(&stream_cb_mutex);
@@ -445,6 +446,78 @@ int USBSID_Class::USBSID_GetSocketSIDType2(int socket, uint8_t socket_config[])
   }
 };
 
+/**
+ * @brief Read the READ_CONFIG reply and check its markers, returns 64 or -1
+ *
+ * Markers: [0]=READ_CONFIG [1]=0x7F [62]=0x8F [63]=0xFF
+ * A mismatch means a misaligned pipe, the rest of the reply is drained
+ *
+ * @param cfg Destination, CONFIG_BUFFER_SIZE bytes
+ */
+int USBSID_Class::USBSID_QueryConfig(unsigned char *cfg)
+{
+  if (!us_PortIsOpen || cfg == NULL) return -1;
+  if (USBSID_Query(READ_CONFIG, 0, 0, 0, 0, cfg, CONFIG_BUFFER_SIZE, QUERY_TIMEOUT_MS) != CONFIG_BUFFER_SIZE) return -1;
+  if (cfg[0] != READ_CONFIG || cfg[1] != 0x7F
+    || cfg[CONFIG_BUFFER_SIZE - 2] != 0x8F || cfg[CONFIG_BUFFER_SIZE - 1] != 0xFF) {
+    pthread_mutex_lock(&cmd_mutex);
+    LIBUSB_DrainIn();  /* Misaligned pipe, drop the rest */
+    pthread_mutex_unlock(&cmd_mutex);
+    return -1;
+  }
+  return CONFIG_BUFFER_SIZE;
+}
+
+/**
+ * @brief Read the raw READ_CONFIG reply into config, returns 64 or -1
+ *
+ * Markers [0]=0x30 [1]=0x7F [62]=0x8F [63]=0xFF are checked
+ * The caller indexes the bytes with the CFG_IDX_* constants
+ *
+ * @param config Destination, 64 bytes
+ */
+int USBSID_Class::USBSID_ReadFullConfig(uint8_t config[64])
+{
+  if (!us_PortIsOpen || config == NULL) return -1;
+  unsigned char cfg[CONFIG_BUFFER_SIZE] = {0};
+  if (USBSID_QueryConfig(cfg) != CONFIG_BUFFER_SIZE) return -1;
+  memcpy(config, cfg, CONFIG_BUFFER_SIZE);
+  return CONFIG_BUFFER_SIZE;
+}
+
+/**
+ * @brief Re-read the socket config on every call, returns 12 or -1
+ *
+ * Markers [0]=0x37 [1]=0x7F [11]=0xFF are checked
+ * Also re-reads the numsids and fmoplsid caches, a preset change alters both
+ * The one-shot state of USBSID_GetSocketConfig() is not touched
+ *
+ * @param socket_config Destination, SOCKET_BUFFER_SIZE (12) bytes
+ */
+int USBSID_Class::USBSID_RefreshSocketConfig(uint8_t socket_config[])
+{
+  if (!us_PortIsOpen || socket_config == NULL) return -1;
+  unsigned char socket_buff[SOCKET_BUFFER_SIZE] = {0};
+  if (USBSID_Query(READ_SOCKETCFG, 0, 0, 0, 0, socket_buff, SOCKET_BUFFER_SIZE, QUERY_TIMEOUT_MS) != SOCKET_BUFFER_SIZE) return -1;
+  if (socket_buff[0] != 0x37 || socket_buff[1] != 0x7F
+    || socket_buff[SOCKET_BUFFER_SIZE - 1] != 0xFF) {
+    pthread_mutex_lock(&cmd_mutex);
+    LIBUSB_DrainIn();  /* Misaligned pipe, drop the rest */
+    pthread_mutex_unlock(&cmd_mutex);
+    return -1;
+  }
+  memcpy(socket_config, socket_buff, SOCKET_BUFFER_SIZE);
+  unsigned char reply[1] = {0};
+  if (USBSID_Query(READ_NUMSIDS, 0, 0, 0, 0, reply, 1, QUERY_TIMEOUT_MS) == 1) {
+    numsids = reply[0];
+  }
+  reply[0] = 0;
+  if (USBSID_Query(READ_FMOPLSID, 0, 0, 0, 0, reply, 1, QUERY_TIMEOUT_MS) == 1) {
+    fmoplsid = reply[0];
+  }
+  return SOCKET_BUFFER_SIZE;
+}
+
 int USBSID_Class::USBSID_GetNumSIDs(void)
 {
   if (!us_PortIsOpen) return 0;
@@ -470,15 +543,71 @@ int USBSID_Class::USBSID_GetFMOplSID(void)
   return (fmoplsid == 0 ? -1 : fmoplsid);
 }
 
+/**
+ * @brief Read the PCB version integer (e.g. 15 for v1.5), returns 0 on failure
+ *
+ * Sends US_PCB_VERSION with byte 2 set, the board replies one byte
+ * Caches a plausible value (10..99) only, a failed read retries on the following call
+ */
 int USBSID_Class::USBSID_GetPCBVersion(void)
 {
   if (!us_PortIsOpen) return 0;
   if (pcbversion == -1) {
-    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x81, 0x1, 0, 0, 0};
-    USBSID_SingleWrite(configbuff, 6);
-    pcbversion = USBSID_SingleReadConfig(result, 1);
+    unsigned char reply[1] = {0};
+    if (USBSID_Query(US_PCB_VERSION, 0x1, 0, 0, 0, reply, 1, QUERY_TIMEOUT_MS) != 1) return 0;
+    if (reply[0] < 10 || reply[0] > 99) return 0;
+    pcbversion = reply[0];
   }
   return pcbversion;
+}
+
+/**
+ * @brief Query a version string, returns the string length or -1
+ *
+ * Wire byte 2 = 0 selects the string, reply is { sub, length, chars... } in 64 bytes
+ * Copies min(length, len - 1) chars and NUL terminates
+ *
+ * @param sub US_PCB_VERSION or USBSID_VERSION
+ * @param buff Destination
+ * @param len Size of buff in bytes
+ */
+int USBSID_Class::USBSID_QueryVersionString(uint8_t sub, char *buff, size_t len)
+{
+  if (!us_PortIsOpen || buff == NULL || len == 0) return -1;
+  unsigned char reply[64] = {0};
+  if (USBSID_Query(sub, 0, 0, 0, 0, reply, 64, QUERY_TIMEOUT_MS) != 64) return -1;
+  if (reply[0] != sub || reply[1] > 62) return -1;
+  size_t slen = reply[1];
+  size_t n = (slen < len - 1) ? slen : (len - 1);
+  memcpy(buff, reply + 2, n);
+  buff[n] = '\0';
+  return (int)slen;
+}
+
+/**
+ * @brief Read the PCB version string (e.g. "1.5"), returns the string length or -1
+ *
+ * Not cached, NUL terminated into buff
+ *
+ * @param buff Destination
+ * @param len Size of buff in bytes
+ */
+int USBSID_Class::USBSID_GetPCBVersionString(char *buff, size_t len)
+{
+  return USBSID_QueryVersionString(US_PCB_VERSION, buff, len);
+}
+
+/**
+ * @brief Read the firmware version string (e.g. "0.9.0"), returns the string length or -1
+ *
+ * Not cached, NUL terminated into buff
+ *
+ * @param buff Destination
+ * @param len Size of buff in bytes
+ */
+int USBSID_Class::USBSID_GetFirmwareVersionString(char *buff, size_t len)
+{
+  return USBSID_QueryVersionString(USBSID_VERSION, buff, len);
 }
 
 void USBSID_Class::USBSID_SetStereo(int state)
@@ -505,6 +634,62 @@ void USBSID_Class::USBSID_ToggleStereo(void)
     USBSID_SingleWrite(configbuff, 6);
   }
   return;
+}
+
+/**
+ * @brief Read the audio switch state with GET_AUDIO, returns 1 stereo, 0 mono or -1
+ *
+ * Returns -1 without USB traffic on PCB below v1.3, that firmware replies 0 for every state
+ */
+int USBSID_Class::USBSID_GetStereo(void)
+{
+  if (!us_PortIsOpen) return -1;
+  if (USBSID_GetPCBVersion() < 13) return -1;  /* PCB_VERSION_INT >= 13 have an audio switch */
+  unsigned char reply[1] = {0};
+  if (USBSID_Query(GET_AUDIO, 0, 0, 0, 0, reply, 1, QUERY_TIMEOUT_MS) != 1) return -1;
+  if (reply[0] > 1) return -1;
+  return reply[0];
+}
+
+/**
+ * @brief Read the audio switch lock from READ_CONFIG byte CFG_IDX_AUDIOLOCK, returns 1 locked, 0 unlocked or -1
+ */
+int USBSID_Class::USBSID_GetAudioLock(void)
+{
+  if (!us_PortIsOpen) return -1;
+  unsigned char cfg[CONFIG_BUFFER_SIZE] = {0};
+  if (USBSID_QueryConfig(cfg) != CONFIG_BUFFER_SIZE) return -1;
+  return (cfg[CFG_IDX_AUDIOLOCK] != 0) ? 1 : 0;
+}
+
+/**
+ * @brief Set mono or stereo with SET_AUDIO, returns the state read back with GET_AUDIO or -1
+ *
+ * The board ignores the request while the audio switch is locked,
+ * compare the returned state with the requested one
+ * Returns -1 without USB traffic on PCB below v1.3
+ *
+ * @param state 1 stereo, 0 mono
+ * @param save true saves the config to flash on the board
+ */
+int USBSID_Class::USBSID_SetStereoSave(int state, bool save)
+{
+  if (!us_PortIsOpen) return -1;
+  if (USBSID_GetPCBVersion() < 13) return -1;  /* PCB_VERSION_INT >= 13 have an audio switch */
+  if (USBSID_SendConfig(SET_AUDIO, (uint8_t)(state ? 1 : 0), (uint8_t)(save ? 1 : 0), 0, 0) < 0) return -1;
+  return USBSID_GetStereo();
+}
+
+/**
+ * @brief Lock or unlock the audio switch with LOCK_AUDIO, returns bytes sent or -1
+ *
+ * @param lock true locks the audio switch in its current state
+ * @param save true saves the config to flash on the board
+ */
+int USBSID_Class::USBSID_LockAudio(bool lock, bool save)
+{
+  if (!us_PortIsOpen) return -1;
+  return USBSID_SendConfig(LOCK_AUDIO, (uint8_t)(lock ? 1 : 0), (uint8_t)(save ? 1 : 0), 0, 0);
 }
 
 
@@ -676,6 +861,33 @@ int USBSID_Class::USBSID_SendConfig(uint8_t sub, uint8_t a, uint8_t b, uint8_t c
 {
   unsigned char buff[6] = {(COMMAND << 6 | CONFIG), sub, a, b, c, d};
   return USBSID_SendCommand(buff, sizeof(buff));
+}
+
+/**
+ * @brief Send a 6 byte config command and read its reply, returns bytes read or -1
+ *
+ * Holds cmd_mutex over the request/reply pair, never takes us_mutex
+ *
+ * @param sub Config sub command, byte 1
+ * @param a Byte 2
+ * @param b Byte 3
+ * @param c Byte 4
+ * @param d Byte 5
+ * @param reply Destination, receives at most want bytes
+ * @param want Number of reply bytes wanted
+ * @param timeout_ms Reply timeout, QUERY_TIMEOUT_MS or DETECT_TIMEOUT_MS
+ */
+int USBSID_Class::USBSID_Query(uint8_t sub, uint8_t a, uint8_t b, uint8_t c, uint8_t d,
+                               unsigned char *reply, size_t want, int timeout_ms)
+{
+  if (!us_PortIsOpen || reply == NULL || want == 0) return -1;
+  int got = -1;
+  pthread_mutex_lock(&cmd_mutex);
+  if (USBSID_SendConfig(sub, a, b, c, d) == 6) {
+    got = LIBUSB_ReadReply(reply, want, timeout_ms);
+  }
+  pthread_mutex_unlock(&cmd_mutex);
+  return got;
 }
 
 /**
@@ -2255,10 +2467,58 @@ int USBSID_Class::LIBUSB_ReadIn(unsigned char *buff, size_t len, int *actual_len
 }
 
 /**
+ * @brief Bulk IN read of one reply with a bounded timeout, returns bytes copied or -1
+ *
+ * Sizes the request like LIBUSB_ReadIn(), a want of 64 bytes or more gets
+ * room for one more 64 byte packet on every interface: the zero length
+ * packet after an exact multiple of 64 bytes ends this transfer
+ * (CDC: 128 byte request for a 64 byte reply)
+ * Drains a late reply with LIBUSB_DrainIn() on timeout or error
+ *
+ * @param buff destination, receives at most want bytes
+ * @param want number of bytes wanted
+ * @param timeout_ms transfer timeout in milliseconds
+ */
+int USBSID_Class::LIBUSB_ReadReply(unsigned char *buff, size_t want, int timeout_ms)
+{
+  if (devh == NULL || buff == NULL || want == 0) return -1;
+  const size_t mps = 64;  /* Full speed bulk max packet size */
+  size_t req = ((want + LEN_IN_BUFFER - 1) / LEN_IN_BUFFER) * LEN_IN_BUFFER;
+  req += LEN_IN_XFER - LEN_IN_BUFFER;  /* room for the zero length packet */
+  if (want >= mps) {
+    const size_t zlp_req = ((want + mps - 1) / mps) * mps + mps;
+    if (req < zlp_req) req = zlp_req;
+  }
+  unsigned char packet[LEN_IN_XFER > 128 ? LEN_IN_XFER : 128];
+  std::vector<unsigned char> large;
+  unsigned char *in = packet;
+  if (req > sizeof(packet)) {
+    large.resize(req);
+    in = large.data();
+  }
+  int got = 0;
+  int ret = libusb_bulk_transfer(devh, EP_IN_ADDR, in, (int)req, &got, timeout_ms);
+  if (ret == LIBUSB_ERROR_PIPE || ret == LIBUSB_ERROR_OVERFLOW) {
+    libusb_clear_halt(devh, EP_IN_ADDR);  /* keep the following read working */
+  }
+  LIBUSB_CheckLost(ret);
+  if (ret < 0) {
+    USBERR(stderr, "[USBSID] Error reading reply of %d bytes: %d, %s: %s\n",
+      (int)want, ret, libusb_error_name(ret), libusb_strerror((enum libusb_error)ret));
+    if (!device_lost) LIBUSB_DrainIn();  /* drop a late reply */
+    return -1;
+  }
+  if (got > (int)want) got = (int)want;
+  if (got > 0) memcpy(buff, in, (size_t)got);
+  return got;
+}
+
+/**
  * @brief Discard stale IN data left by an earlier host process
  *
- * Open and reconnect only, runs synchronously before the async transfers
- * and any command, short timeout (LIBUSB_TIMEOUT is 0 (infinite) on CDC)
+ * Runs synchronously on open and reconnect, before the async transfers and
+ * any command, and after a failed reply read, short timeout (LIBUSB_TIMEOUT
+ * is 0 (infinite) on CDC)
  * Drains EP_IN_ADDR, the CDC IN endpoint or the vendor IN endpoint on macOS
  */
 void USBSID_Class::LIBUSB_DrainIn(void)
@@ -2463,6 +2723,11 @@ int USBSID_Class::LIBUSB_Setup(bool start_threaded, bool with_cycles)
   rc = read_completed = write_completed = -1;
   features = -1;  /* Firmware may differ from the last open */
   fwversion = -1;
+  pcbversion = -1;  /* Board may differ from the last open */
+  numsids = 0;
+  fmoplsid = -1;
+  socketconfig = -1;
+  clk_retrieved = 0;
   device_lost = false;
   out_failures = 0;
   threaded = start_threaded;

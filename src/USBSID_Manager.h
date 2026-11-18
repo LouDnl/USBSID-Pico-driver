@@ -113,6 +113,19 @@ class USBSID_Manager {
     /** @brief Integer firmware version of a board e.g. 81 (0.8.1), 100 (1.0.0)
      * Read once and cached in USBSID_Class (OpenAll() pre-reads it), -1 for an invalid board or unknown */
     int FirmwareVersionInt(int board) const;
+
+    /** @brief GET_AUDIO of one board, 1 stereo, 0 mono
+     * -1 for an invalid board, failure or PCB below v1.3 */
+    int GetStereo(int board);
+
+    /** @brief USBSID_SetStereo() on every open board */
+    void SetStereoAll(int state);
+
+    /** @brief Re-read numsids, fmoplsid, pcbversion and the socket config of one board, then rebuild the logical map
+     * Returns false for an invalid board or a failed socket config read, boards_ and the map stay unchanged then
+     * Logical SID numbering may change: the caller stops playback and flushes before this call */
+    bool RefreshBoardInfo(int board);
+
     const std::vector<LogicalSlot> & LogicalMap(void) const { return logical_map_; }
 
     /** @brief Borrow an open board for direct calls (command channel), nullptr when out of range. */

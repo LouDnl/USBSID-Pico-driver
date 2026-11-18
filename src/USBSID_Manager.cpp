@@ -164,6 +164,36 @@ int USBSID_Manager::FirmwareVersionInt(int board) const
   return devices_[board]->USBSID_GetFirmwareVersionInt();
 }
 
+int USBSID_Manager::GetStereo(int board)
+{
+  if (board < 0 || board >= (int)devices_.size() || !devices_[board]) return -1;
+  return devices_[board]->USBSID_GetStereo();
+}
+
+void USBSID_Manager::SetStereoAll(int state)
+{
+  for (auto &dev : devices_) dev->USBSID_SetStereo(state);
+}
+
+bool USBSID_Manager::RefreshBoardInfo(int board)
+{
+  if (board < 0 || board >= (int)devices_.size() || !devices_[board]) return false;
+  USBSID_NS::USBSID_Class *dev = devices_[board].get();
+
+  uint8_t cfg[SOCKET_BUFFER_SIZE];
+  if (dev->USBSID_RefreshSocketConfig(cfg) < 0) return false;  /* also re-reads the numsids and fmoplsid caches */
+
+  BoardInfo &info = boards_[board];
+  info.numsids = dev->USBSID_GetNumSIDs();
+  info.fmoplsid = dev->USBSID_GetFMOplSID();
+  info.pcbversion = dev->USBSID_GetPCBVersion();
+  memcpy(info.socketconfig, cfg, SOCKET_BUFFER_SIZE);
+  info.socketconfig_valid = true;
+
+  BuildLogicalMap();
+  return true;
+}
+
 void USBSID_Manager::CloseAll(void)
 {
   devices_.clear();  /* ~USBSID_Class() closes each board's connection */

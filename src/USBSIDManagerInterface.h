@@ -107,6 +107,25 @@ extern "C" {
   int getfirmwareversionint_USBSIDMgr(USBSIDmgr, int board);
 
   /**
+   * @brief GET_AUDIO of one board, 1 stereo, 0 mono, -1 for an invalid board, failure or PCB below v1.3
+   *
+   * @param board 0-based board index
+   */
+  int getstereo_USBSIDMgr(USBSIDmgr, int board);
+
+  /** @brief Set the audio switch state on every open board */
+  void setstereoall_USBSIDMgr(USBSIDmgr, int state);
+
+  /**
+   * @brief Re-read numsids, fmoplsid, pcbversion and socket config of one board, then rebuild the logical map
+   * Logical SID numbering may change: stop playback and flush before this call
+   * Returns false for an invalid board or a failed read, the map is unchanged then
+   *
+   * @param board 0-based board index
+   */
+  bool refreshboardinfo_USBSIDMgr(USBSIDmgr, int board);
+
+  /**
    * @brief Copy the board mapping of a logical SID, returns false if logical_sid is out of range
    *
    * @param logical_sid 0 .. totalsids_USBSIDMgr() - 1

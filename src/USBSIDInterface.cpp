@@ -161,6 +161,38 @@ extern "C"
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_ToggleStereo();
   };
+  int getstereo_USBSID(USBSIDitf p) {
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_GetStereo();
+  };
+  int getaudiolock_USBSID(USBSIDitf p) {
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_GetAudioLock();
+  };
+  int setstereosave_USBSID(USBSIDitf p, int state, bool save) {
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_SetStereoSave(state, save);
+  };
+  int lockaudio_USBSID(USBSIDitf p, bool lock, bool save) {
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_LockAudio(lock, save);
+  };
+  int getpcbversionstring_USBSID(USBSIDitf p, char *buff, size_t len) {
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_GetPCBVersionString(buff, len);
+  };
+  int getfirmwareversionstring_USBSID(USBSIDitf p, char *buff, size_t len) {
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_GetFirmwareVersionString(buff, len);
+  };
+  int readfullconfig_USBSID(USBSIDitf p, uint8_t *cfg) {
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_ReadFullConfig(cfg);
+  };
+  int refreshsocketconfig_USBSID(USBSIDitf p, uint8_t *cfg) {
+    if( p == NULL ) return -1;
+    return ((USBSID_Class*)p)->USBSID_RefreshSocketConfig(cfg);
+  };
   void enablesid_USBSID(USBSIDitf p) {
     if( p == NULL ) return;
     return ((USBSID_Class*)p)->USBSID_EnableSID();

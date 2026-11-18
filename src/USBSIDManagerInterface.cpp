@@ -105,6 +105,18 @@ extern "C"
     if( m == NULL ) return -1;
     return ((USBSID_Manager*) m)->FirmwareVersionInt(board);
   };
+  int getstereo_USBSIDMgr(USBSIDmgr m, int board){
+    if( m == NULL ) return -1;
+    return ((USBSID_Manager*) m)->GetStereo(board);
+  };
+  void setstereoall_USBSIDMgr(USBSIDmgr m, int state){
+    if( m == NULL ) return;
+    return ((USBSID_Manager*) m)->SetStereoAll(state);
+  };
+  bool refreshboardinfo_USBSIDMgr(USBSIDmgr m, int board){
+    if( m == NULL ) return false;
+    return ((USBSID_Manager*) m)->RefreshBoardInfo(board);
+  };
   bool getlogicalslot_USBSIDMgr(USBSIDmgr m, int logical_sid, USBSIDlogicalslot *out){
     if( m == NULL || out == NULL ) return false;
     const std::vector<USBSID_Manager::LogicalSlot> &map = ((USBSID_Manager*) m)->LogicalMap();
