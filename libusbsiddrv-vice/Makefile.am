@@ -41,7 +41,7 @@ EXTRA_DIST = \
 # (needs to be declared empty to avoid `make` to try to build libusbsiddrv.o
 # from libusbsiddrv.c)
 libusbsiddrv_a_SOURCES =
-noinst_HEADERS = USBSID.h USBSIDInterface.h USBSID_Manager.h USBSIDManagerInterface.h
+noinst_HEADERS = usbsid_protocol.h USBSID.h USBSIDInterface.h USBSID_Manager.h USBSIDManagerInterface.h
 
 # Make sure we actually link the generated object files into the library:
 libusbsiddrv_a_LIBADD = $(USBSIDDRIVER)

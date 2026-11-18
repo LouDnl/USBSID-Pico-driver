@@ -304,7 +304,7 @@ long USBSID_Class::USBSID_GetClockRate(void)
     return cycles_per_sec;
   } else if (clk_retrieved == 0) {
     USBSID_SyncTime();
-    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x57, 0, 0, 0, 0};
+    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), GET_CLOCK, 0, 0, 0, 0};
     USBSID_SingleWrite(configbuff, 6);
     us_clkrate = clockSpeed[USBSID_SingleReadConfig(result, 1)];
     cycles_per_sec = us_clkrate;
@@ -331,7 +331,7 @@ uint8_t* USBSID_Class::USBSID_GetSocketConfig(uint8_t socket_config[])
   if (!us_PortIsOpen) return NULL;
   if (socketconfig == -1) {
     socketconfig = 1;
-    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x37, 0, 0, 0, 0};
+    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), READ_SOCKETCFG, 0, 0, 0, 0};
     USBSID_SingleWrite(configbuff, 6);
     uint8_t socket_buff[SOCKET_BUFFER_SIZE];
     int ret = USBSID_ReadConfig(socket_buff, SOCKET_BUFFER_SIZE);
@@ -449,7 +449,7 @@ int USBSID_Class::USBSID_GetNumSIDs(void)
 {
   if (!us_PortIsOpen) return 0;
   if (numsids == 0) {
-    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x39, 0, 0, 0, 0};
+    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), READ_NUMSIDS, 0, 0, 0, 0};
     USBSID_SingleWrite(configbuff, 6);
     numsids = USBSID_SingleReadConfig(result, 1);
     return numsids;
@@ -463,7 +463,7 @@ int USBSID_Class::USBSID_GetFMOplSID(void)
 {
   if (!us_PortIsOpen) return 0;
   if (fmoplsid == -1) {
-    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x3A, 0, 0, 0, 0};
+    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), READ_FMOPLSID, 0, 0, 0, 0};
     USBSID_SingleWrite(configbuff, 6);
     fmoplsid = USBSID_SingleReadConfig(result, 1);
   }
@@ -488,7 +488,7 @@ void USBSID_Class::USBSID_SetStereo(int state)
     USBSID_GetPCBVersion();
   }
   if (pcbversion >= 13) { /* PCB_VERSION_INT >= 13 have an audio switch */
-    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x89, (uint8_t)state, 0, 0, 0};
+    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), SET_AUDIO, (uint8_t)state, 0, 0, 0};
     USBSID_SingleWrite(configbuff, 6);
   }
   return;
@@ -501,7 +501,7 @@ void USBSID_Class::USBSID_ToggleStereo(void)
     USBSID_GetPCBVersion();
   }
   if (pcbversion >= 13) { /* PCB_VERSION_INT >= 13 have an audio switch */
-    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), 0x88, 0x0, 0, 0, 0};
+    uint8_t configbuff[6] = {(COMMAND << 6 | CONFIG), TOGGLE_AUDIO, 0x0, 0, 0, 0};
     USBSID_SingleWrite(configbuff, 6);
   }
   return;
@@ -1095,8 +1095,8 @@ unsigned char USBSID_Class::USBSID_Read(unsigned char *writebuff, uint16_t cycle
 /**
  * @brief Start the SID memory stream on the stream interface, returns 0 or -1 on failure
  *
- * Claims STREAM_ITF, submits STREAM_TRANSFERS persistent IN transfers, starts
- * the stream event thread and sends STREAM_REQ_START. A running stream is
+ * Claims STREAM_ITF_NUM, submits STREAM_TRANSFERS persistent IN transfers, starts
+ * the stream event thread and sends STREAM_REQUEST_START. A running stream is
  * restarted with the new settings and an empty cache
  *
  * Reads US_FEATURES first, firmware lacking the SID stream
@@ -1113,10 +1113,10 @@ int USBSID_Class::USBSID_StreamStart(int rate_hz, uint8_t sid_mask)
   features = -1;  /* Read fresh */
   const int f = USBSID_GetFeatures();
   if (f < 0 || !(f & US_FEATURE_SIDSTREAM)) return -1;
-  int r = libusb_claim_interface(devh, STREAM_ITF);
+  int r = libusb_claim_interface(devh, STREAM_ITF_NUM);
   if (r < 0) {
     USBERR(stderr, "[USBSID] Stream interface %d not available: %d, %s: %s\n",
-      STREAM_ITF, r, libusb_error_name(r), libusb_strerror((enum libusb_error)r));
+      STREAM_ITF_NUM, r, libusb_error_name(r), libusb_strerror((enum libusb_error)r));
     return -1;
   }
   stream_claimed = true;
@@ -1177,7 +1177,7 @@ int USBSID_Class::USBSID_StreamStart(int rate_hz, uint8_t sid_mask)
   /* Cast to int, C++20 deprecates | between two different enum types */
   r = libusb_control_transfer(devh,
     (int)LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE,
-    STREAM_REQ_START, 0, STREAM_ITF, start, sizeof(start), 1000);
+    STREAM_REQUEST_START, 0, STREAM_ITF_NUM, start, sizeof(start), 1000);
   if (r < 0) {  /* Unsupported rate stalls */
     USBERR(stderr, "[USBSID] Stream start (rate %d) refused: %d, %s: %s\n",
       rate_hz, r, libusb_error_name(r), libusb_strerror((enum libusb_error)r));
@@ -1199,7 +1199,7 @@ int USBSID_Class::USBSID_StreamStop(void)
   if (stream_active && devh != NULL && !device_lost) {
     int r = libusb_control_transfer(devh,
       (int)LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE,
-      STREAM_REQ_STOP, 0, STREAM_ITF, NULL, 0, 1000);
+      STREAM_REQUEST_STOP, 0, STREAM_ITF_NUM, NULL, 0, 1000);
     LIBUSB_CheckLost(r);
   }
   stream_active = false;
@@ -1241,7 +1241,7 @@ int USBSID_Class::USBSID_StreamStop(void)
     stream_pending[i] = false;
   }
   if (stream_claimed && devh != NULL) {
-    libusb_release_interface(devh, STREAM_ITF);
+    libusb_release_interface(devh, STREAM_ITF_NUM);
   }
   stream_claimed = false;
   return 0;
@@ -1260,7 +1260,7 @@ bool USBSID_Class::USBSID_StreamRunning(void)
 }
 
 /**
- * @brief Read the firmware stream state (STREAM_REQ_INFO), returns 0 or -1 on failure or firmware lacking the stream
+ * @brief Read the firmware stream state (STREAM_REQUEST_INFO), returns 0 or -1 on failure or firmware lacking the stream
  *
  * [0] format version, [1] frame size, [2-3] max rate LE, [4] SID count,
  * [5] bit 0 running, [6-7] rate LE, [8] active SID mask, [9] reserved,
@@ -1274,7 +1274,7 @@ int USBSID_Class::USBSID_StreamQuery(uint8_t info[STREAM_INFO_LEN])
   memset(info, 0, STREAM_INFO_LEN);
   int r = libusb_control_transfer(devh,
     (int)LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE,
-    STREAM_REQ_INFO, 0, STREAM_ITF, info, STREAM_INFO_LEN, 1000);
+    STREAM_REQUEST_INFO, 0, STREAM_ITF_NUM, info, STREAM_INFO_LEN, 1000);
   if (r < 0) {
     LIBUSB_CheckLost(r);
     return -1;
@@ -1360,7 +1360,7 @@ void USBSID_Class::USBSID_StreamFrame(const uint8_t *f, int len)
     stream_regs[sid * 32 + r].store(f[12 + r], std::memory_order_relaxed);
   }
   stream_tick[sid] = (uint16_t)(f[2] | (f[3] << 8));
-  stream_flags[sid] = (uint8_t)(f[1] & 0xE0);
+  stream_flags[sid] = (uint8_t)(f[1] & 0xC0);
   stream_cycles[sid] = (uint32_t)f[4] | ((uint32_t)f[5] << 8) | ((uint32_t)f[6] << 16) | ((uint32_t)f[7] << 24);
   stream_processed[sid] = (uint32_t)f[8] | ((uint32_t)f[9] << 8) | ((uint32_t)f[10] << 16) | ((uint32_t)f[11] << 24);
   stream_frames[sid].fetch_add(1, std::memory_order_release);

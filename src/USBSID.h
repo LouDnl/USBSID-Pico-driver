@@ -161,115 +161,32 @@ namespace USBSID_NS
     LEN_OUT_BUFFER = 64,
   };
 
-  enum {
-    /* BYTE 0 - top 2 bits */
-    WRITE        =   0,   /*        0b0 ~ 0x00 */
-    READ         =   1,   /*        0b1 ~ 0x40 */
-    CYCLED_WRITE =   2,   /*       0b10 ~ 0x80 */
-    COMMAND      =   3,   /*       0b11 ~ 0xC0 */
-    /* BYTE 0 - lower 6 bits for byte count */
-    /* BYTE 0 - lower 6 bits for Commands */
-    PAUSE        =  10,   /*     0b1010 ~ 0x0A */
-    UNPAUSE      =  11,   /*     0b1011 ~ 0x0B */
-    MUTE         =  12,   /*     0b1100 ~ 0x0C */
-    UNMUTE       =  13,   /*     0b1101 ~ 0x0D */
-    RESET_SID    =  14,   /*     0b1110 ~ 0x0E */
-    DISABLE_SID  =  15,   /*     0b1111 ~ 0x0F */
-    ENABLE_SID   =  16,   /*    0b10000 ~ 0x10 */
-    CLEAR_BUS    =  17,   /*    0b10001 ~ 0x11 */
-    CONFIG       =  18,   /*    0b10010 ~ 0x12 */
-    RESET_MCU    =  19,   /*    0b10011 ~ 0x13 */
-    BOOTLOADER   =  20,   /*    0b10100 ~ 0x14 */
-  };
-
-  /* Socket config array
-   *  0 Initiator     = 0x37
-   *  1 Verification  = 0x7f
-   *  2 HiByte        = socketOne enabled
-   *  2 LoByte        = socketOne dualsid
-   *  3 LoByte        = socketOne chipType
-   *  4 HiByte        = socketOne sid1Type
-   *  4 LoByte        = socketOne sid2Type
-   *  5 HiByte        = socketTwo enabled
-   *  5 LoByte        = socketTwo dualsid
-   *  6 LoByte        = socketTwo chipType
-   *  7 HiByte        = socketTwo sid1Type
-   *  7 LoByte        = socketTwo sid2Type
-   *  8 HiByte        = socketOne SID1 id
-   *  8 LoByte        = socketOne SID2 id
-   *  9 HiByte        = socketOne SID1 id
-   *  9 LoByte        = socketOne SID2 id
-   * 10 LoByte 0b001  = socketTwo mirrors socketOne
-   * 10 LoByte 0b010  = sockets are flipped One is Two and vice versa
-   * 10 LoByte 0b100  = SID addresses are mixed (quad sid only)
-   * 11 Terminator    = 0xff
-   */
-  #define SOCKET_BUFFER_SIZE 12
-
-  /* Config sub commands, byte 1 after (COMMAND << 6 | CONFIG) */
-  enum {
-    USBSID_VERSION      = 0x80,  /* Byte 2 != 0: firmware version integer, 1 byte (81 = 0.8.1, 100 = 1.0.0) */
-    US_FEATURES         = 0x82,  /* Read compiled firmware features, 1 byte */
-    /* Onboard emulator, firmware built with ONBOARD_EMULATOR=1 only */
-    UPLOAD_SID_START    = 0xD0,  /* Enter receiving mode, byte 2 = file type */
-    UPLOAD_SID_DATA     = 0xD1,  /* Data packet, 62 payload bytes */
-    UPLOAD_SID_END      = 0xD2,  /* Leave receiving mode */
-    UPLOAD_SID_SIZE     = 0xD3,  /* File size, 16 bit big endian */
-    UPLOAD_SID_PLAYTIME = 0xD4,  /* Max play time in ms, 32 bit big endian */
-    SID_PLAYER_TUNE     = 0xE0,  /* Load uploaded tune, byte 3 = subtune (0 based), starts play */
-    SID_PLAYER_START    = 0xE1,  /* Start play of a loaded tune */
-    SID_PLAYER_STOP     = 0xE2,  /* Stop play */
-    SID_PLAYER_PAUSE    = 0xE3,  /* Toggle pause */
-    SID_PLAYER_NEXT     = 0xE4,  /* Next subtune */
-    SID_PLAYER_PREV     = 0xE5,  /* Previous subtune */
-    SID_PLAYER_TWO      = 0xE6,  /* Force play on socket two or SID two */
-    SID_PLAYER_FFWD     = 0xE7,  /* Fast forward, byte 2 = 1 on, 0 off */
-    SID_PLAYER_MUTE     = 0xE9,  /* Mute chip/voice, bytes 2-4 = chip, voice, mute */
-    SID_PLAYER_MUTED    = 0xEA,  /* Read mute state, 5 byte reply */
-    SID_PLAYER_TIME     = 0xEB,  /* Read play time in ms, 4 byte big endian reply */
-  };
-
-  /* File types for UPLOAD_SID_START */
-  enum {
-    UPLOAD_FILE_STDIN = 0x00,
-    UPLOAD_FILE_SID   = 0x01,
-    UPLOAD_FILE_PRG   = 0x02,
-  };
-
-  /* US_FEATURES reply bits */
-  enum {
-    US_FEATURE_RP2350    = 0x01,
-    US_FEATURE_RGBVU     = 0x04,
-    US_FEATURE_NET       = 0x10,
-    US_FEATURE_NSD       = 0x20,
-    US_FEATURE_SIDSTREAM = 0x40,  /* SID stream interface (USB interface 7) built in */
-    US_FEATURE_EMULATOR  = 0x80,
-  };
+  /* Protocol constants: command bytes, config sub commands, config item ids,
+   * upload ids, feature bits, buffer sizes and SID stream constants. Copy of
+   * the firmware header, regenerate with the sync script, never edit. */
+  #ifdef _USBSID_PROTOCOL_H_ /* First undefine */
+  #undef _USBSID_PROTOCOL_H_
+  #endif
+  #include "usbsid_protocol.h"
+  #ifdef _USBSID_PROTOCOL_H_ /* Second undefine */
+  #undef _USBSID_PROTOCOL_H_
+  #endif
 
   /* Firmware version integer from which batch READ (USBSID_ReadMulti) exists, no feature bit */
-  #define US_FW_VERSION_BATCH_READ 81
+  #define US_FW_VERSION_BATCH_READ USBSID_FW_VERSION_BATCH_READ
 
 #ifdef USBSID_SID_STREAM
-  /* SID stream interface, firmware with US_FEATURE_SIDSTREAM */
+  /* SID stream interface, firmware with US_FEATURE_SIDSTREAM, wire
+   * constants (STREAM_ITF_NUM, STREAM_REQUEST_*, ...) from usbsid_protocol.h */
   enum {
-    STREAM_ITF           = 7,     /* Vendor interface, claimed by USBSID_StreamStart() */
-    STREAM_EP_IN         = 0x87,
-    STREAM_REQ_START     = 0x10,  /* Vendor control OUT, 4 bytes ~ rate LE, SID mask, 0 (byte 3 reserved) */
-    STREAM_REQ_STOP      = 0x11,  /* Vendor control OUT, no data */
-    STREAM_REQ_INFO      = 0x12,  /* Vendor control IN, STREAM_INFO_LEN bytes */
-    STREAM_INFO_LEN      = 16,
-    STREAM_FRAME_SID     = 0x53,  /* frame[0] of a SID frame */
-    STREAM_FRAME_SIZE    = 63,    /* Short packet, one SID per frame */
     STREAM_TRANSFERS     = 4,     /* Persistent IN transfers */
-    STREAM_FLAG_DEFERRED = 0x20,  /* Built late, mirror only */
-    STREAM_FLAG_OTHER    = 0x40,  /* Bus owned by a non USB owner */
   };
 
   /* Latest stream frame of one SID, see USBSID_GetStreamState() */
   struct USBSID_StreamState {
     uint32_t frames = 0;     /* Frames received after USBSID_StreamStart(), 0 = no data */
     uint16_t tick = 0;       /* Firmware tick sequence */
-    uint8_t flags = 0;       /* STREAM_FLAG_* bits */
+    uint8_t flags = 0;       /* frame[1] flag bits, STREAM_FLAG_OTHER_OWNER */
     uint32_t cycles = 0;     /* PHI1 cycle counter of the snapshot */
     uint32_t processed = 0;  /* Main interface packets the firmware processed */
   };
@@ -278,9 +195,6 @@ namespace USBSID_NS
    * driver instance from inside it */
   typedef void (*USBSID_StreamCallback)(const uint8_t *frame, int len, void *user);
 #endif /* USBSID_SID_STREAM */
-
-  #define UPLOAD_PACKET_SIZE  64  /* Every upload packet is a full 64 byte packet */
-  #define UPLOAD_PAYLOAD_SIZE 62  /* Data bytes per UPLOAD_SID_DATA packet */
 
 
   /* Ringbuffer related */
@@ -489,7 +403,7 @@ namespace USBSID_NS
       std::atomic_bool stream_pending[STREAM_TRANSFERS] = {};
       std::atomic_bool stream_active{false};         /* callbacks resubmit */
       std::atomic_bool stream_events{false};         /* event thread runs */
-      bool stream_claimed = false;                   /* STREAM_ITF claimed */
+      bool stream_claimed = false;                   /* STREAM_ITF_NUM claimed */
       bool stream_thread = false;                    /* stream_ptid joinable */
       pthread_t stream_ptid;
       std::atomic_int stream_session{-1};            /* frame[48] to accept, -1 none */

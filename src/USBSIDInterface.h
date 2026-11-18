@@ -32,6 +32,13 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+/* Protocol macros (USBSID_FEATURE_*, USBSID_CFG_IDX_*, USBSID_CONFIG_LEN,
+ * USBSID_SOCKETCONFIG_LEN, USBSID_PLAYER_*, USBSID_UPLOAD_FILE_*,
+ * USBSID_STREAM_*, USBSID_FW_VERSION_BATCH_READ) without the protocol enums */
+#define USBSID_PROTOCOL_MACROS_ONLY
+#include "usbsid_protocol.h"
+#undef USBSID_PROTOCOL_MACROS_ONLY
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -39,43 +46,15 @@ extern "C" {
   /* Buffer sizes shared with the C++ driver */
   #define USBSID_SERIAL_LEN       64  /* Serial string incl. terminator */
   #define USBSID_PORTPATH_LEN      8  /* USB port path depth */
-  #define USBSID_SOCKETCONFIG_LEN 12  /* Raw socket config reply */
-
-  /* Onboard emulator upload file types */
-  #define USBSID_UPLOAD_FILE_STDIN 0x00
-  #define USBSID_UPLOAD_FILE_SID   0x01
-  #define USBSID_UPLOAD_FILE_PRG   0x02
-
-  /* Onboard emulator player commands for playercommand_USBSID() */
-  #define USBSID_PLAYER_START 0xE1
-  #define USBSID_PLAYER_STOP  0xE2
-  #define USBSID_PLAYER_PAUSE 0xE3
-  #define USBSID_PLAYER_NEXT  0xE4
-  #define USBSID_PLAYER_PREV  0xE5
-  #define USBSID_PLAYER_TWO   0xE6
-
-  /* getfeatures_USBSID() bits */
-  #define USBSID_FEATURE_RP2350   0x01
-  #define USBSID_FEATURE_RGBVU    0x04
-  #define USBSID_FEATURE_NET      0x10
-  #define USBSID_FEATURE_NSD      0x20
-  #define USBSID_FEATURE_SIDSTREAM 0x40  /* SID stream interface (USB interface 7) built in */
-  #define USBSID_FEATURE_EMULATOR 0x80
-
-  /* Firmware version integer from which readmulti_USBSID() uses a batch READ, no feature bit */
-  #define USBSID_FW_VERSION_BATCH_READ 81
 
 #ifdef USBSID_SID_STREAM
-  /* SID stream, see streamstart_USBSID() */
-  #define USBSID_STREAM_INFO_LEN       16
-  #define USBSID_STREAM_FLAG_DEFERRED  0x20  /* Built late, mirror only */
-  #define USBSID_STREAM_FLAG_OTHER     0x40  /* Bus owned by a non USB owner */
+  /* SID stream, see streamstart_USBSID(), USBSID_STREAM_* from usbsid_protocol.h */
 
   /* Latest stream frame of one SID as returned by getstreamstate_USBSID() */
   typedef struct {
     uint32_t frames;     /* Frames received after the stream started, 0 = no data */
     uint16_t tick;       /* Firmware tick sequence */
-    uint8_t flags;       /* USBSID_STREAM_FLAG_* bits */
+    uint8_t flags;       /* frame[1] flag bits, USBSID_STREAM_FLAG_OTHER_OWNER */
     uint32_t cycles;     /* PHI1 cycle counter of the snapshot */
     uint32_t processed;  /* Main interface packets the firmware processed */
   } USBSIDstreamstate;

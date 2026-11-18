@@ -51,7 +51,6 @@ static void on_sigint(int sig)
 /* Frame statistics, written by the stream callback */
 struct stats_t {
   std::atomic<long> frames[4];
-  std::atomic<long> deferred[4];
   std::atomic<long> other[4];
   std::atomic<long> gaps[4];
   int last_tick[4];
@@ -71,8 +70,7 @@ static void on_frame(const uint8_t *f, int len, void *user)
   const int sid = f[1] & 0x03;
   const int tick = f[2] | (f[3] << 8);
   st->frames[sid]++;
-  if (f[1] & STREAM_FLAG_DEFERRED) st->deferred[sid]++;
-  if (f[1] & STREAM_FLAG_OTHER) st->other[sid]++;
+  if (f[1] & STREAM_FLAG_OTHER_OWNER) st->other[sid]++;
   if (st->last_tick[sid] >= 0 && ((st->last_tick[sid] + 1) & 0xFFFF) != tick) st->gaps[sid]++;
   st->last_tick[sid] = tick;
 }
@@ -108,7 +106,7 @@ int main(int argc, char **argv)
 
   static stats_t st;
   for (int s = 0; s < 4; s++) {
-    st.frames[s] = st.deferred[s] = st.other[s] = st.gaps[s] = 0;
+    st.frames[s] = st.other[s] = st.gaps[s] = 0;
     st.last_tick[s] = -1;
   }
   us.USBSID_SetStreamCallback(on_frame, &st);
@@ -195,9 +193,9 @@ int main(int argc, char **argv)
     USBSID_StreamState ss;
     us.USBSID_GetStreamState(s, &ss);
     const double fps = st.frames[s] / secs;
-    std::printf("SID %d: %ld frames (%.0f/s), deferred %ld, other owner %ld, tick gaps %ld, "
+    std::printf("SID %d: %ld frames (%.0f/s), other owner %ld, tick gaps %ld, "
       "last tick %u cycles %u processed %u\n",
-      s + 1, st.frames[s].load(), fps, st.deferred[s].load(), st.other[s].load(),
+      s + 1, st.frames[s].load(), fps, st.other[s].load(),
       st.gaps[s].load(),
       ss.tick, ss.cycles, ss.processed);
     if (fps < rate * 0.9) ok = false;
